@@ -1198,7 +1198,7 @@ def generate_narrative(query, result_df):
     {data_str}
     
     Guidelines:
-    1. **Structure:** Executive Summary, Key Insights, Strategic Note.
+    1. **Structure:** Executive Summary, Table(when ever needed), Key Insights, Strategic Note.
     2. **Formatting:** - Use **Bold** for Customer Names.
        - Do NOT bold the numbers themselves if they are inside a table or list, to avoid formatting errors.
        - NO scientific notation.
@@ -1208,9 +1208,11 @@ def generate_narrative(query, result_df):
        - **NEVER** use scientific notation (e.g., 2.3e7). Use the formatted numbers provided (e.g., 23,000,000).
     4. **Data Integrity:**
        - If the data contains 'nan' or 'Unclassified', explicitly mention this as a "Data Quality Note".
+
     ### 🧠 NARRATIVE FRAMEWORK:
-    1.  **The "So What?":** Start with a single, high-impact sentence summarizing the answer. (e.g., "Revenue grew by 15%, driven primarily by X.")
-    2.  **Evidence-Based Insights:** - Provide 2-3 specific data points to back up your claim.
+    1.  **The "So What?":** Start with a single, high-impact sentence summarizing the answer (e.g., "Revenue grew by 15%, driven primarily by X."), table when ever needed. 
+    2.  **Evidence-Based Insights:** 
+        - Provide 2-3 specific data points to back up your claim.
         - **Contextualize:** Don't just list numbers; explain *why* they matter (e.g., "X is 2x larger than Y").
     3.  **Strategic Implication:** Offer one forward-looking recommendation or observation.
     
