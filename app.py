@@ -1,15 +1,306 @@
+# import streamlit as st
+# import pandas as pd
+# import io
+# import matplotlib.pyplot as plt
+# import seaborn as sns
+# from groq import Groq
+# import re
+# import warnings
+# import traceback
+
+# # --- 1. CORE CONFIGURATION ---
+# st.set_page_config(page_title="AI Analyst: Enterprise Edition", layout="wide", page_icon="🧠")
+# warnings.filterwarnings("ignore")
+
+# # API Setup
+# api_key = st.secrets.get("GROQ_API_KEY")
+# if not api_key:
+#     st.error("🚨 Groq API Key missing! Check .streamlit/secrets.toml")
+#     st.stop()
+
+# client = Groq(api_key=api_key)
+# MODEL_ID = "llama-3.3-70b-versatile" 
+
+# # ==========================================
+# # 🧠 LAYER 1: ADAPTIVE DATA ENGINE
+# # ==========================================
+
+# @st.cache_data
+# def load_and_adapt_data(file):
+#     """Ingests data and automatically adapts types."""
+#     try:
+#         file.seek(0)
+#         if file.name.endswith('.csv'):
+#             df = pd.read_csv(file, low_memory=False)
+#         else:
+#             df = pd.read_excel(file)
+
+#         # 1. Normalize Headers
+#         df.columns = [
+#             str(c).strip().lower().replace(' ', '_').replace('.', '').replace('/', '_').replace('-', '_') 
+#             for c in df.columns
+#         ]
+
+#         # 2. Adaptive Type Conversion
+#         date_col = next((c for c in df.columns if 'date' in c or 'invoice' in c), None)
+#         if date_col:
+#             df[date_col] = pd.to_datetime(df[date_col], format='%d-%b-%y', errors='coerce')
+#             if df[date_col].isnull().mean() > 0.5: 
+#                 df[date_col] = pd.to_datetime(df[date_col], dayfirst=True, errors='coerce')
+#             df['cleaned_year'] = df[date_col].dt.year
+
+#         sales_col = next((c for c in df.columns if c in ['gross_amount', 'net_amount_inr', 'net_amount', 'total_amount', 'sales']), None)
+#         if sales_col:
+#             if df[sales_col].dtype == 'object':
+#                  df[sales_col] = pd.to_numeric(df[sales_col].astype(str).str.replace(r'[$,₹]', '', regex=True), errors='coerce')
+#             df['cleaned_sales'] = df[sales_col]
+
+#         # 3. String Normalization
+#         for col in df.select_dtypes(include=['object']).columns:
+#             df[col] = df[col].astype(str).str.strip()
+
+#         return df
+#     except Exception as e:
+#         return None
+
+# # ==========================================
+# # 👁️ LAYER 2: DATA HEALTH SCANNER
+# # ==========================================
+
+# def get_data_health_report(df):
+#     """Scans for empty columns to prevent hallucinations."""
+#     report = []
+#     report.append(f"Total Rows: {len(df)}")
+    
+#     for col in df.columns:
+#         null_pct = df[col].isnull().mean()
+#         if null_pct > 0.5:
+#             report.append(f"⚠️ CRITICAL WARNING: Column '{col}' is {null_pct:.1%} empty. DO NOT USE IT. Find a valid alternative (e.g., 'shade_no').")
+            
+#     return "\n".join(report)
+
+# # ==========================================
+# # 🛡️ LAYER 3: CODE SANITIZER (NEW)
+# # ==========================================
+
+# def clean_llm_response(text):
+#     """
+#     Extracts pure Python code from the LLM's response.
+#     Removes conversational fluff like 'Here is the code...'
+#     """
+#     # Pattern 1: Look for markdown code blocks
+#     code_block_pattern = r"```(?:python)?\s*(.*?)```"
+#     match = re.search(code_block_pattern, text, re.DOTALL)
+    
+#     if match:
+#         code = match.group(1).strip()
+#     else:
+#         # Pattern 2: If no markdown, use the whole text but strip generic text lines
+#         # This is a fallback. Ideally, the LLM adheres to instructions.
+#         code = text.strip()
+    
+#     # Remove any line that doesn't look like code (basic heuristic)
+#     lines = code.split('\n')
+#     clean_lines = [line for line in lines if not line.lower().startswith(('here is', 'to address', 'note:', 'i have'))]
+    
+#     return "\n".join(clean_lines)
+
+# # ==========================================
+# # 🛠️ LAYER 4: SELF-HEALING LOGIC
+# # ==========================================
+
+# # ==========================================
+# # 🛠️ LAYER 4: SELF-HEALING LOGIC (UPDATED)
+# # ==========================================
+
+# def generate_code_prompt(query, df, history_context, error_context=None):
+#     health_report = get_data_health_report(df)
+    
+#     # 1. SEMANTIC HINTS (The Fix for State vs City)
+#     # We explicitly tell the AI how to find locations to prevent the specific bug you faced.
+#     hints = """
+#     ### 💡 SMART SEARCH HINTS:
+#     - **Location Logic:** 'Maharashtra' is a STATE. Look for columns like `agent_state`, `state`, or `region`. 
+#     - **Fallback:** If State columns are missing/empty, filter by known Cities: ['Mumbai', 'Pune', 'Nagpur', 'Thane', 'Nashik'].
+#     - **Shade Logic:** If `shade_name` is empty, ALWAYS use `shade_no`.
+#     """
+
+#     prompt = f"""
+#     You are an Autonomous Python Data Analyst.
+    
+#     ### DATA PROFILE:
+#     - Columns: {list(df.columns)}
+    
+#     ### 🛡️ HEALTH WARNINGS:
+#     {health_report}
+    
+#     {hints}
+    
+#     ### 🧠 CODING RULES:
+#     1. **Fuzzy Matching:** Use `df[col].str.contains('val', case=False, na=False)` for text.
+#     2. **Empty Data Handling:** If a filter returns empty data, the code is WRONG. Try a different column.
+#     3. **Output:** Return ONLY valid Python code. Assign result to `result_df`.
+#     """
+    
+#     if error_context:
+#         prompt += f"\n\n### 🚨 PREVIOUS ATTEMPT FAILED:"
+#         prompt += f"\nError: {error_context}"
+#         prompt += f"\nFIX: The previous logic returned no data or crashed. Try a different column or approach."
+    
+#     prompt += f"\n\n### QUERY: {query}"
+    
+#     if history_context:
+#         prompt += f"\n\n### CONTEXT: {history_context}"
+        
+#     return prompt
+
+# def execute_with_self_correction(query, df, history_context, max_retries=2):
+#     last_error = None
+    
+#     for attempt in range(max_retries + 1):
+#         try:
+#             # 1. Generate Code
+#             prompt = generate_code_prompt(query, df, history_context, last_error)
+            
+#             resp = client.chat.completions.create(
+#                 model=MODEL_ID,
+#                 messages=[{"role": "system", "content": prompt}],
+#                 temperature=0.1 # Slight creativity allowed for problem solving
+#             )
+#             raw_response = resp.choices[0].message.content
+#             code = clean_llm_response(raw_response)
+            
+#             # 2. Execute Code
+#             code = re.sub(r"pd\.read_csv\(.*?\)", "df.copy()", code) 
+#             env = {"df": df.copy(), "pd": pd, "plt": plt, "sns": sns}
+#             exec(code, env)
+            
+#             result_df = env.get("result_df")
+            
+#             # 3. VALIDATION (Crucial Step)
+#             if not isinstance(result_df, pd.DataFrame):
+#                 raise ValueError("Result is not a DataFrame.")
+                
+#             # NEW: Treat "No Data" as an Error to trigger a retry!
+#             if result_df.empty:
+#                 raise ValueError("Query returned 0 rows. The filter logic (e.g., City vs State) might be wrong.")
+            
+#             # If we get here, success!
+#             if attempt > 0:
+#                 st.toast(f"✅ Auto-corrected logic in attempt {attempt+1}", icon="🧠")
+#             return result_df, code, None
+            
+#         except Exception as e:
+#             last_error = str(e)
+#             # If we have retries left, loop again. The 'last_error' will be fed back to the AI.
+#             if attempt < max_retries:
+#                 st.toast(f"⚠️ Attempt {attempt+1} failed: {str(e)}. Retrying...", icon="🔧")
+#                 continue
+#             else:
+#                 # If all retries fail, return the empty result or error
+#                 return None, code, last_error
+            
+# # ==========================================
+# # 🗣️ LAYER 5: NARRATIVE ENGINE
+# # ==========================================
+
+# def generate_narrative(query, result_df):
+#     if result_df.empty: return "No data found."
+    
+#     data_str = result_df.head(15).to_markdown(index=False)
+    
+#     prompt = f"""
+#     You are a Senior Analyst. Query: "{query}"
+    
+#     Data:
+#     {data_str}
+    
+#     Format:
+#     1. Markdown Tables for lists.
+#     2. '₹' for currency.
+#     3. Direct, professional insights.
+#     """
+    
+#     resp = client.chat.completions.create(
+#         model=MODEL_ID,
+#         messages=[{"role": "system", "content": prompt}],
+#         temperature=0.7
+#     )
+#     return resp.choices[0].message.content
+
+# # ==========================================
+# # 🖥️ UI IMPLEMENTATION
+# # ==========================================
+
+# st.title("🧠 AI Analyst: Enterprise Edition")
+
+# with st.sidebar:
+#     file = st.file_uploader("Upload Data", type=["csv", "xlsx"])
+#     if st.button("Clear History"):
+#         st.session_state.messages = []
+#         st.rerun()
+
+# if "messages" not in st.session_state:
+#     st.session_state.messages = []
+
+# # Display History
+# for msg in st.session_state.messages:
+#     with st.chat_message(msg["role"]):
+#         st.markdown(msg["content"])
+#         if "data" in msg:
+#             with st.expander("View Data"):
+#                 st.dataframe(msg["data"])
+
+# if file:
+#     if "df" not in st.session_state:
+#         st.session_state.df = load_and_adapt_data(file)
+#         st.toast("Data Loaded Successfully")
+    
+#     df = st.session_state.df
+#     query = st.chat_input("Ask a question...")
+    
+#     if query:
+#         st.session_state.messages.append({"role": "user", "content": query})
+#         with st.chat_message("user"):
+#             st.write(query)
+            
+#         with st.chat_message("assistant"):
+#             with st.spinner("Analyzing..."):
+#                 history = "\n".join([m["content"] for m in st.session_state.messages[-3:]])
+                
+#                 result_df, code, error = execute_with_self_correction(query, df, history)
+                
+#                 if result_df is not None:
+#                     response = generate_narrative(query, result_df)
+#                     st.markdown(response)
+#                     with st.expander("Technical Details"):
+#                         st.code(code)
+#                         st.dataframe(result_df)
+                    
+#                     st.session_state.messages.append({"role": "assistant", "content": response, "data": result_df})
+#                 else:
+#                     st.error("Analysis Failed.")
+#                     st.code(error)
+
+
+
+
+
 import streamlit as st
 import pandas as pd
-import io
 import matplotlib.pyplot as plt
 import seaborn as sns
-from groq import Groq
+from groq import Groq, RateLimitError
 import re
 import warnings
 import traceback
 
-# --- 1. CORE CONFIGURATION ---
-st.set_page_config(page_title="AI Analyst: Enterprise Edition", layout="wide", page_icon="🧠")
+# --- 1. CONFIGURATION & SETUP ---
+st.set_page_config(
+    page_title="AI Analyst: Enterprise Edition", 
+    layout="wide", 
+    page_icon="🧠"
+)
 warnings.filterwarnings("ignore")
 
 # API Setup
@@ -23,11 +314,14 @@ MODEL_ID = "llama-3.3-70b-versatile"
 
 # ==========================================
 # 🧠 LAYER 1: ADAPTIVE DATA ENGINE
+# Capabilities: Robust Loading, Auto-Cleaning, Type Inference
 # ==========================================
 
 @st.cache_data
 def load_and_adapt_data(file):
-    """Ingests data and automatically adapts types."""
+    """
+    Ingests data, normalizes headers, and intelligently detects date/currency columns.
+    """
     try:
         file.seek(0)
         if file.name.endswith('.csv'):
@@ -35,27 +329,30 @@ def load_and_adapt_data(file):
         else:
             df = pd.read_excel(file)
 
-        # 1. Normalize Headers
+        # 1. Standardize Headers (Snake Case)
         df.columns = [
             str(c).strip().lower().replace(' ', '_').replace('.', '').replace('/', '_').replace('-', '_') 
             for c in df.columns
         ]
 
-        # 2. Adaptive Type Conversion
+        # 2. Adaptive Date Parsing
         date_col = next((c for c in df.columns if 'date' in c or 'invoice' in c), None)
         if date_col:
             df[date_col] = pd.to_datetime(df[date_col], format='%d-%b-%y', errors='coerce')
+            # Fallback for mixed formats
             if df[date_col].isnull().mean() > 0.5: 
                 df[date_col] = pd.to_datetime(df[date_col], dayfirst=True, errors='coerce')
             df['cleaned_year'] = df[date_col].dt.year
 
-        sales_col = next((c for c in df.columns if c in ['gross_amount', 'net_amount_inr', 'net_amount', 'total_amount', 'sales']), None)
+        # 3. Adaptive Currency Cleaning
+        # Finds columns like 'net_amount', 'sales', 'gross_amount'
+        sales_col = next((c for c in df.columns if c in ['net_amount_inr', 'net_amount', 'gross_amount', 'total_amount', 'sales']), None)
         if sales_col:
             if df[sales_col].dtype == 'object':
                  df[sales_col] = pd.to_numeric(df[sales_col].astype(str).str.replace(r'[$,₹]', '', regex=True), errors='coerce')
             df['cleaned_sales'] = df[sales_col]
 
-        # 3. String Normalization
+        # 4. String Normalization (Crucial for fuzzy matching)
         for col in df.select_dtypes(include=['object']).columns:
             df[col] = df[col].astype(str).str.strip()
 
@@ -65,68 +362,61 @@ def load_and_adapt_data(file):
 
 # ==========================================
 # 👁️ LAYER 2: DATA HEALTH SCANNER
+# Capabilities: Prevents hallucinations by flagging empty columns
 # ==========================================
 
 def get_data_health_report(df):
-    """Scans for empty columns to prevent hallucinations."""
+    """
+    Scans the dataset to warn the AI about empty or low-quality columns.
+    """
     report = []
-    report.append(f"Total Rows: {len(df)}")
-    
     for col in df.columns:
         null_pct = df[col].isnull().mean()
         if null_pct > 0.5:
-            report.append(f"⚠️ CRITICAL WARNING: Column '{col}' is {null_pct:.1%} empty. DO NOT USE IT. Find a valid alternative (e.g., 'shade_no').")
-            
+            report.append(f"⚠️ CRITICAL WARNING: Column '{col}' is {null_pct:.1%} empty. DO NOT USE IT. Find a valid alternative (e.g., use 'shade_no' if 'shade_name' is empty).")
     return "\n".join(report)
 
 # ==========================================
-# 🛡️ LAYER 3: CODE SANITIZER (NEW)
+# 🛡️ LAYER 3: CODE SANITIZER
+# Capabilities: Extracts pure Python from chatty LLM responses
 # ==========================================
 
 def clean_llm_response(text):
     """
-    Extracts pure Python code from the LLM's response.
-    Removes conversational fluff like 'Here is the code...'
+    Strips conversational text (e.g., "Here is the code") to prevent SyntaxErrors.
     """
-    # Pattern 1: Look for markdown code blocks
     code_block_pattern = r"```(?:python)?\s*(.*?)```"
     match = re.search(code_block_pattern, text, re.DOTALL)
     
     if match:
         code = match.group(1).strip()
     else:
-        # Pattern 2: If no markdown, use the whole text but strip generic text lines
-        # This is a fallback. Ideally, the LLM adheres to instructions.
         code = text.strip()
     
-    # Remove any line that doesn't look like code (basic heuristic)
+    # Remove lines that definitely aren't code
     lines = code.split('\n')
-    clean_lines = [line for line in lines if not line.lower().startswith(('here is', 'to address', 'note:', 'i have'))]
-    
+    clean_lines = [line for line in lines if not line.lower().startswith(('here is', 'to address', 'note:', 'i have', 'python'))]
     return "\n".join(clean_lines)
 
 # ==========================================
-# 🛠️ LAYER 4: SELF-HEALING LOGIC
-# ==========================================
-
-# ==========================================
-# 🛠️ LAYER 4: SELF-HEALING LOGIC (UPDATED)
+# 🛠️ LAYER 4: SELF-HEALING LOGIC ENGINE
+# Capabilities: Retries on error, checks for empty results, enforces hints
 # ==========================================
 
 def generate_code_prompt(query, df, history_context, error_context=None):
     health_report = get_data_health_report(df)
     
-    # 1. SEMANTIC HINTS (The Fix for State vs City)
-    # We explicitly tell the AI how to find locations to prevent the specific bug you faced.
+    # SEMANTIC HINTS (The "Brains" of the operation)
     hints = """
-    ### 💡 SMART SEARCH HINTS:
-    - **Location Logic:** 'Maharashtra' is a STATE. Look for columns like `agent_state`, `state`, or `region`. 
-    - **Fallback:** If State columns are missing/empty, filter by known Cities: ['Mumbai', 'Pune', 'Nagpur', 'Thane', 'Nashik'].
-    - **Shade Logic:** If `shade_name` is empty, ALWAYS use `shade_no`.
+    ### 💡 ANALYST HINTS:
+    - **Null Handling:** If ranking Top N, ALWAYS filter out NaNs first: `df.dropna(subset=['col'])`.
+    - **Location Logic:** 'Maharashtra' is a STATE. Cities are 'Mumbai', 'Pune'. Use `agent_state` or `bill_to_party_city`.
+    - **Fuzzy Match:** NEVER use `==` for strings. Use `df[col].str.contains('val', case=False, na=False)`.
+    - **Date Logic:** Use `cleaned_year` for fiscal/calendar year queries.
     """
 
     prompt = f"""
-    You are an Autonomous Python Data Analyst.
+    You are an Expert Python Data Analyst.
     
     ### DATA PROFILE:
     - Columns: {list(df.columns)}
@@ -136,16 +426,14 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     
     {hints}
     
-    ### 🧠 CODING RULES:
-    1. **Fuzzy Matching:** Use `df[col].str.contains('val', case=False, na=False)` for text.
-    2. **Empty Data Handling:** If a filter returns empty data, the code is WRONG. Try a different column.
-    3. **Output:** Return ONLY valid Python code. Assign result to `result_df`.
+    ### 🧠 STRICT RULES:
+    1. **Valid Code Only:** Output pure Python code inside ```python tags.
+    2. **Result Variable:** Assign the final output dataframe to `result_df`.
+    3. **No Empty Results:** If your filter logic returns an empty dataframe, the logic is wrong. Try a different column.
     """
     
     if error_context:
-        prompt += f"\n\n### 🚨 PREVIOUS ATTEMPT FAILED:"
-        prompt += f"\nError: {error_context}"
-        prompt += f"\nFIX: The previous logic returned no data or crashed. Try a different column or approach."
+        prompt += f"\n\n### 🚨 PREVIOUS ATTEMPT FAILED:\nError: {error_context}\nFix: Rewrite the code to fix this specific error."
     
     prompt += f"\n\n### QUERY: {query}"
     
@@ -165,99 +453,129 @@ def execute_with_self_correction(query, df, history_context, max_retries=2):
             resp = client.chat.completions.create(
                 model=MODEL_ID,
                 messages=[{"role": "system", "content": prompt}],
-                temperature=0.1 # Slight creativity allowed for problem solving
+                temperature=0.1 # Low temp for precision
             )
             raw_response = resp.choices[0].message.content
             code = clean_llm_response(raw_response)
             
-            # 2. Execute Code
+            # 2. Execute Code in Sandbox
+            # Safety: Replace read_csv with direct copy to prevent file access issues
             code = re.sub(r"pd\.read_csv\(.*?\)", "df.copy()", code) 
             env = {"df": df.copy(), "pd": pd, "plt": plt, "sns": sns}
             exec(code, env)
             
             result_df = env.get("result_df")
             
-            # 3. VALIDATION (Crucial Step)
+            # 3. Validation Checks
             if not isinstance(result_df, pd.DataFrame):
-                raise ValueError("Result is not a DataFrame.")
-                
-            # NEW: Treat "No Data" as an Error to trigger a retry!
-            if result_df.empty:
-                raise ValueError("Query returned 0 rows. The filter logic (e.g., City vs State) might be wrong.")
+                raise ValueError("The code ran, but did not create a 'result_df' DataFrame.")
             
-            # If we get here, success!
+            # CRITICAL: Treat empty results as a failure to trigger a retry with better logic
+            if result_df.empty:
+                raise ValueError("Query returned 0 rows. The filter logic (e.g., City vs State, or spelling) might be incorrect.")
+            
+            # Success!
             if attempt > 0:
                 st.toast(f"✅ Auto-corrected logic in attempt {attempt+1}", icon="🧠")
+                
             return result_df, code, None
             
         except Exception as e:
             last_error = str(e)
-            # If we have retries left, loop again. The 'last_error' will be fed back to the AI.
             if attempt < max_retries:
-                st.toast(f"⚠️ Attempt {attempt+1} failed: {str(e)}. Retrying...", icon="🔧")
+                st.toast(f"⚠️ Retrying... (Error: {last_error})", icon="🔧")
                 continue
             else:
-                # If all retries fail, return the empty result or error
                 return None, code, last_error
-            
+
 # ==========================================
-# 🗣️ LAYER 5: NARRATIVE ENGINE
+# 🗣️ LAYER 5: ELITE NARRATIVE ENGINE
+# Capabilities: "McKinsey-style" formatting, Anti-Scientific Notation
 # ==========================================
 
 def generate_narrative(query, result_df):
     if result_df.empty: return "No data found."
     
-    data_str = result_df.head(15).to_markdown(index=False)
+    # --- STEP 1: FORCE-FORMAT NUMBERS ---
+    # We convert numbers to strings (e.g., "1,234.56") so the LLM *cannot* hallucinate values.
+    display_df = result_df.copy()
+    for col in display_df.select_dtypes(include=['number']).columns:
+        # Check if column is likely monetary or count
+        if display_df[col].mean() > 1000:
+             display_df[col] = display_df[col].apply(lambda x: f"{x:,.2f}")
     
+    data_str = display_df.head(10).to_markdown(index=False)
+    
+    # --- STEP 2: ELITE PERSONA PROMPT ---
     prompt = f"""
-    You are a Senior Analyst. Query: "{query}"
+    You are an Elite Strategy Consultant (McKinsey/BCG style).
     
-    Data:
+    ### USER QUERY: "{query}"
+    
+    ### DATA EVIDENCE (Already Formatted):
     {data_str}
     
-    Format:
-    1. Markdown Tables for lists.
-    2. '₹' for currency.
-    3. Direct, professional insights.
+    ### NARRATIVE GUIDELINES:
+    1. **Structure:**
+       - **Executive Summary:** One clear, direct sentence answering the question.
+       - **Key Insights:** 2-3 bullet points highlighting drivers, outliers, or trends.
+       - **Strategic Note:** One brief recommendation or observation.
+    
+    2. **Tone & Style:**
+       - Professional, concise, and high-impact.
+       - Use **Bold** for key figures and names.
+       - **NEVER** use scientific notation (e.g., 2.3e7). Use the formatted numbers provided (e.g., 23,000,000).
+       
+    3. **Data Integrity:**
+       - If the data contains 'nan' or 'Unclassified', explicitly mention this as a "Data Quality Note".
     """
     
-    resp = client.chat.completions.create(
-        model=MODEL_ID,
-        messages=[{"role": "system", "content": prompt}],
-        temperature=0.7
-    )
-    return resp.choices[0].message.content
+    try:
+        resp = client.chat.completions.create(
+            model=MODEL_ID,
+            messages=[{"role": "system", "content": prompt}],
+            temperature=0.7
+        )
+        return resp.choices[0].message.content
+    except RateLimitError:
+        return f"**⚠️ High Traffic:** I analyzed the data successfully, but cannot generate the narrative summary right now.\n\n**Here is your data:**\n{data_str}"
+    except Exception as e:
+        return f"Error generating summary. Here is the raw data:\n\n{data_str}"
 
 # ==========================================
 # 🖥️ UI IMPLEMENTATION
 # ==========================================
 
 st.title("🧠 AI Analyst: Enterprise Edition")
+st.markdown("### Intelligent Data Analysis & Strategy")
 
 with st.sidebar:
-    file = st.file_uploader("Upload Data", type=["csv", "xlsx"])
-    if st.button("Clear History"):
+    st.header("Configuration")
+    file = st.file_uploader("Upload Data (CSV/Excel)", type=["csv", "xlsx"])
+    if st.button("🧹 Clear Conversation"):
         st.session_state.messages = []
         st.rerun()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display History
+# Display Chat History
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if "data" in msg:
-            with st.expander("View Data"):
+            with st.expander("📊 View Supporting Data"):
                 st.dataframe(msg["data"])
 
 if file:
+    # Load Data (Layer 1)
     if "df" not in st.session_state:
-        st.session_state.df = load_and_adapt_data(file)
-        st.toast("Data Loaded Successfully")
+        with st.spinner("🚀 Indexing and optimizing data..."):
+            st.session_state.df = load_and_adapt_data(file)
+        st.success("Data successfully loaded!")
     
     df = st.session_state.df
-    query = st.chat_input("Ask a question...")
+    query = st.chat_input("Ask a question about your data...")
     
     if query:
         st.session_state.messages.append({"role": "user", "content": query})
@@ -265,19 +583,29 @@ if file:
             st.write(query)
             
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing..."):
+            with st.spinner("⚡ analyzing..."):
+                # Get Context
                 history = "\n".join([m["content"] for m in st.session_state.messages[-3:]])
                 
+                # Execute Analysis (Layers 3 & 4)
                 result_df, code, error = execute_with_self_correction(query, df, history)
                 
                 if result_df is not None:
+                    # Generate Narrative (Layer 5)
                     response = generate_narrative(query, result_df)
                     st.markdown(response)
-                    with st.expander("Technical Details"):
-                        st.code(code)
+                    
+                    # Show Tech Details
+                    with st.expander("🔍 Analyst Logic (Code)"):
+                        st.code(code, language='python')
                         st.dataframe(result_df)
                     
-                    st.session_state.messages.append({"role": "assistant", "content": response, "data": result_df})
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": response, 
+                        "data": result_df
+                    })
                 else:
-                    st.error("Analysis Failed.")
-                    st.code(error)
+                    st.error("Unable to complete analysis.")
+                    with st.expander("See Error Logs"):
+                        st.code(error)
