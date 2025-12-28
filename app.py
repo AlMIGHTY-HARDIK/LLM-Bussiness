@@ -13,7 +13,7 @@ st.set_page_config(page_title="AI Analyst: Enterprise Edition", layout="wide", p
 warnings.filterwarnings("ignore")
 
 # API Setup
-api_key = st.secrets.get("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")
+api_key = st.secrets.get("GROQ_API_KEY")
 if not api_key:
     st.error("🚨 Groq API Key missing! Check .streamlit/secrets.toml")
     st.stop()
