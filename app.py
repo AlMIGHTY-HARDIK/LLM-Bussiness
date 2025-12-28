@@ -959,7 +959,6 @@
 #                     st.code(error) # Uses the 'error' variable to show what went wrong
 
 
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -1038,7 +1037,7 @@ def get_data_health_report(df):
     for col in df.columns:
         null_pct = df[col].isnull().mean()
         if null_pct > 0.5:
-            report.append(f"⚠️ CRITICAL WARNING: Column '{col}' is {null_pct:.1%} empty. DO NOT USE IT.")
+            report.append(f"⚠️ CRITICAL WARNING: Column '{col}' is {null_pct:.1%} empty. DO NOT USE IT. Find a valid alternative.")
     return "\n".join(report)
 
 # ==========================================
@@ -1048,12 +1047,14 @@ def get_data_health_report(df):
 def clean_llm_response(text):
     code_block_pattern = r"```(?:python)?\s*(.*?)```"
     match = re.search(code_block_pattern, text, re.DOTALL)
+    
     if match:
         code = match.group(1).strip()
     else:
         code = text.strip()
+    
     lines = code.split('\n')
-    clean_lines = [line for line in lines if not line.lower().startswith(('here is', 'to address', 'note:', 'python'))]
+    clean_lines = [line for line in lines if not line.lower().startswith(('here is', 'to address', 'note:', 'i have', 'python'))]
     return "\n".join(clean_lines)
 
 # ==========================================
@@ -1065,11 +1066,17 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     
     hints = """
     ### 💡 ANALYST HINTS:
-    - **Customer Logic:** ALWAYS use the NAME column (e.g., `bill_to_party`), NEVER use the CODE column (e.g., `bill_to_party_code`).
-    - **Null Handling:** If ranking Top N, filter out NaNs: `df.dropna(subset=['col'])`.
+    - **Null Handling:** If ranking Top N, ALWAYS filter out NaNs first: `df.dropna(subset=['col'])`.
+    - **Customer Logic:** ALWAYS use `bill_to_party` (Name) for analysis. NEVER use `bill_to_party_code` (Code).
     - **Location Logic:** 'Maharashtra' is a STATE. Cities are 'Mumbai', 'Pune'.
-    - **Fuzzy Match:** Use `df[col].str.contains('val', case=False, na=False)`.
-    - **Visuals:** If asked for trend/comparison, create a Plotly figure named `fig`.
+    - **Fuzzy Match:** NEVER use `==` for strings. Use `df[col].str.contains('val', case=False, na=False)`.
+    - **Visuals:** If the user asks for a trend, comparison, or distribution, generate a Plotly chart.
+    - **Plotting Rule:** Create a figure object named `fig`. DO NOT use `fig.show()`. Streamlit will handle it.
+    - **Example:**
+      ```python
+      import plotly.express as px
+      fig = px.bar(df, x='city', y='sales', title='Sales by City')
+      ```
     """
 
     prompt = f"""
@@ -1087,6 +1094,7 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     1. **Valid Code Only:** Output pure Python code inside ```python tags.
     2. **Result Variable:** Assign the final output dataframe to `result_df`.
     3. **No Empty Results:** If your filter logic returns an empty dataframe, raise a ValueError.
+    4. **Smart Columns:** If a column has a "_code" and a normal version (e.g., party_code vs party), USE THE NORMAL VERSION.
     """
     
     if error_context:
@@ -1094,9 +1102,8 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     
     prompt += f"\n\n### QUERY: {query}"
     
-    # Only inject history if it exists (Controlled by Toggle)
     if history_context:
-        prompt += f"\n\n### CONTEXT (Use this for follow-up questions):\n{history_context}"
+        prompt += f"\n\n### CONTEXT: {history_context}"
         
     return prompt
 
@@ -1113,7 +1120,8 @@ def execute_with_self_correction(query, df, history_context, max_retries=2):
                 messages=[{"role": "system", "content": prompt}],
                 temperature=0.1 
             )
-            code = clean_llm_response(resp.choices[0].message.content)
+            raw_response = resp.choices[0].message.content
+            code = clean_llm_response(raw_response)
             
             # 2. Execute Code
             code = re.sub(r"pd\.read_csv\(.*?\)", "df.copy()", code) 
@@ -1125,25 +1133,26 @@ def execute_with_self_correction(query, df, history_context, max_retries=2):
             
             # 3. Validation
             if not isinstance(result_df, pd.DataFrame):
-                raise ValueError("Result is not a DataFrame.")
+                raise ValueError("The code ran, but did not create a 'result_df' DataFrame.")
+            
             if result_df.empty:
-                raise ValueError("Query returned 0 rows. Check logic.")
+                raise ValueError("Query returned 0 rows. The filter logic might be incorrect.")
             
             if attempt > 0:
-                st.toast(f"✅ Auto-corrected in attempt {attempt+1}", icon="🧠")
+                st.toast(f"✅ Auto-corrected logic in attempt {attempt+1}", icon="🧠")
                 
             return result_df, code, None, fig 
             
         except Exception as e:
             last_error = str(e)
             if attempt < max_retries:
-                st.toast(f"⚠️ Retrying... ({last_error})", icon="🔧")
+                st.toast(f"⚠️ Retrying... (Error: {last_error})", icon="🔧")
                 continue
             else:
-                return None, code, last_error, None
+                return None, code, last_error, None # Ensuring 4 values are returned
 
 # ==========================================
-# 🗣️ LAYER 5: STRATEGIC NARRATIVE ENGINE
+# 🗣️ LAYER 5: ELITE NARRATIVE ENGINE
 # ==========================================
 
 def generate_narrative(query, result_df):
@@ -1156,25 +1165,17 @@ def generate_narrative(query, result_df):
     
     data_str = display_df.head(10).to_markdown(index=False)
     
-    # --- UPGRADED PROMPT FOR IMPACT ---
     prompt = f"""
-    You are the Chief Strategy Officer (CSO) of a large corporation.
-    
-    ### USER QUERY: "{query}"
-    
-    ### DATA EVIDENCE:
+    You are an Elite Strategy Consultant.
+    User Query: "{query}"
+    Data (Formatted):
     {data_str}
     
-    ### REPORTING STRUCTURE:
-    1. **Executive Headline:** Start with a high-impact summary sentence.
-    2. **Critical Insights:** Provide 2-3 bullet points analyzing *why* this matters (e.g., look for concentration risk, growth spikes, or underperformance).
-    3. **Strategic Recommendation:** Give one actionable piece of business advice based on this data.
-    
-    ### RULES:
-    - **Tone:** Authoritative, Professional, Concise.
-    - **Formatting:** Use **Bold** for key entities and numbers.
-    - **Numbers:** NEVER use scientific notation. Use the formatted numbers provided.
-    - **Data Gaps:** If 'nan' or 'Unclassified' is a top result, flag it as a "Data Quality Risk" immediately.
+    Guidelines:
+    1. **Structure:** Executive Summary, Key Insights, Strategic Note.
+    2. **Formatting:** - Use **Bold** for Customer Names.
+       - Do NOT bold the numbers themselves if they are inside a table or list, to avoid formatting errors.
+       - NO scientific notation.
     """
     
     try:
@@ -1184,70 +1185,70 @@ def generate_narrative(query, result_df):
             temperature=0.7
         )
         return resp.choices[0].message.content
-    except Exception:
-        return f"Error generating summary. Data:\n{data_str}"
+    except Exception as e:
+        return f"Error generating summary. Raw Data:\n{data_str}"
 
 # ==========================================
 # 🖥️ UI IMPLEMENTATION
 # ==========================================
 
 st.title("🧠 AI Analyst: Enterprise Edition")
+st.markdown("### Intelligent Data Analysis & Strategy")
 
-# --- SIDEBAR CONTROL CENTER ---
+# --- SIDEBAR WITH FEATURE BUTTONS ---
 with st.sidebar:
     st.header("⚙️ Data & Controls")
     file = st.file_uploader("Upload Data (CSV/Excel)", type=["csv", "xlsx"])
     
     if file:
         st.divider()
-        st.subheader("🧠 Intelligence Hub")
-        
-        # --- 1. MEMORY TOGGLE (The Feature You Requested) ---
-        use_memory = st.toggle("Enable Chat Context", value=True, help="ON: AI remembers previous questions.\nOFF: Each question is independent.")
-        
-        # --- 2. MEMORY VISUALIZER ---
-        if use_memory:
-            with st.expander("📜 View Active Memory"):
-                if "messages" in st.session_state and st.session_state.messages:
-                    st.caption("The AI is using this context for your next answer:")
-                    for i, msg in enumerate(st.session_state.messages):
-                        icon = "👤" if msg['role'] == "user" else "🤖"
-                        st.text(f"{icon} {msg['content'][:40]}...")
-                else:
-                    st.info("No conversation history yet.")
-        else:
-            st.warning("🚫 Context is DISABLED. AI will ignore previous chat history.")
-
-        # --- 3. ACTIONS ---
-        st.divider()
+        st.subheader("🚀 Quick Actions")
+        # Feature Buttons to trigger analysis
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🧹 Reset", type="primary"):
-                st.session_state.messages = []
-                st.rerun()
+            if st.button("📊 Overview"):
+                st.session_state.quick_query = "Show me a high-level overview of sales and key trends."
         with col2:
-            if st.button("💾 Save"):
-                chat_str = "\n".join([f"[{m['role']}] {m['content']}" for m in st.session_state.messages])
-                st.download_button("Download", chat_str, "transcript.txt")
+            if st.button("🏆 Top Cust."):
+                st.session_state.quick_query = "Who are the top 5 customers by total revenue?"
         
-        st.subheader("🚀 Quick Actions")
-        if st.button("📊 High-Level Overview"):
-            st.session_state.quick_query = "Show me a high-level overview of sales and key trends."
-        if st.button("🏆 Top Customers"):
-            st.session_state.quick_query = "Who are the top 5 customers by total revenue?"
+        st.divider()
+        
+        st.subheader("🧠 Memory Manager")
+        
+        # --- NEW: MEMORY TOGGLE BUTTON ---
+        use_memory = st.toggle("Enable Chat Memory", value=True, help="If ON, the AI uses previous context. If OFF, each question is independent.")
+        
+        # 1. View Memory
+        with st.expander("📜 View Active Memory"):
+            if "messages" in st.session_state and st.session_state.messages:
+                for i, msg in enumerate(st.session_state.messages):
+                    st.text(f"{i+1}. {msg['role'].title()}: {msg['content'][:60]}...")
+            else:
+                st.info("Memory is empty.")
 
-# --- MAIN APP LOGIC ---
+        # 2. Download Memory
+        if "messages" in st.session_state and st.session_state.messages:
+            chat_log = "\n".join([f"[{m['role'].upper()}] {m['content']}" for m in st.session_state.messages])
+            st.download_button("💾 Save Chat", chat_log, "chat_log.txt")
+
+        # 3. Clear Memory
+        if st.button("🧹 Clear Memory", type="primary"):
+            st.session_state.messages = []
+            st.rerun()
+
+# --- MAIN CHAT LOGIC ---
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Render Chat History
+# Display History
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if "data" in msg:
-            with st.expander("📊 Data Source"):
-                st.dataframe(msg["data"])
+            with st.expander("📊 View Data"):
+                st.dataframe(msg["data"].style.format(precision=2))
         if "fig" in msg and msg["fig"]:
              st.plotly_chart(msg["fig"], use_container_width=True)
 
@@ -1255,15 +1256,15 @@ if file:
     if "df" not in st.session_state:
         with st.spinner("🚀 Indexing..."):
             st.session_state.df = load_and_adapt_data(file)
-        st.success("Data Indexed")
+        st.success("Data Ready!")
     
     df = st.session_state.df
     
-    # Handle Input (Text or Button)
-    query = st.chat_input("Ask a strategic question...")
+    # Check for Quick Query trigger or Input
+    query = st.chat_input("Ask a question...")
     if "quick_query" in st.session_state and st.session_state.quick_query:
         query = st.session_state.quick_query
-        del st.session_state.quick_query
+        del st.session_state.quick_query # Reset
     
     if query:
         st.session_state.messages.append({"role": "user", "content": query})
@@ -1271,28 +1272,25 @@ if file:
             st.write(query)
             
         with st.chat_message("assistant"):
-            with st.spinner("⚡ Analyzing & Formulating Strategy..."):
+            with st.spinner("⚡ analyzing..."):
                 
-                # --- MEMORY LOGIC ---
+                # --- NEW LOGIC FOR MEMORY TOGGLE ---
                 if use_memory:
-                    # Pass previous Q&A pairs to the logic engine
                     history = "\n".join([m["content"] for m in st.session_state.messages[-3:]])
                 else:
-                    # Pass nothing, forcing a fresh analysis
-                    history = ""
+                    history = "" # Force independent query
                 
-                # Execute
+                # ✅ EXECUTE ANALYSIS
                 result_df, code, error, fig = execute_with_self_correction(query, df, history)
                 
                 if result_df is not None:
-                    # Generate Strategic Narrative
                     response = generate_narrative(query, result_df)
                     st.markdown(response)
                     
                     if fig:
                         st.plotly_chart(fig, use_container_width=True)
-                        
-                    with st.expander("🔍 Technical Logic"):
+                    
+                    with st.expander("🔍 Analyst Logic"):
                         st.code(code, language='python')
                         st.dataframe(result_df)
                     
@@ -1303,5 +1301,5 @@ if file:
                         "fig": fig
                     })
                 else:
-                    st.error("Analysis Failed")
-                    st.code(error)
+                    st.error("Analysis Failed.")
+                    st.code(error) # Uses the 'error' variable to show what went wrong
