@@ -931,7 +931,7 @@ if file:
             with st.spinner("⚡ analyzing..."):
                 history = "\n".join([m["content"] for m in st.session_state.messages[-3:]])
                 
-                # FIXED: Correct unpacking of 4 values
+                # ✅ THIS IS THE CORRECT LINE
                 result_df, code, error, fig = execute_with_self_correction(query, df, history)
                 
                 if result_df is not None:
@@ -945,8 +945,6 @@ if file:
                         st.code(code, language='python')
                         st.dataframe(result_df)
                     
-                    # Store everything including the figure (if using pickle/serializable) 
-                    # Note: Storing 'fig' in session state can be heavy, but fine for simple usage.
                     st.session_state.messages.append({
                         "role": "assistant", 
                         "content": response, 
@@ -955,4 +953,4 @@ if file:
                     })
                 else:
                     st.error("Analysis Failed.")
-                    st.code(error)
+                    st.code(error) # Uses the 'error' variable to show what went wrong
