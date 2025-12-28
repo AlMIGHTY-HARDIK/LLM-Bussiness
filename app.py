@@ -413,6 +413,13 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     - **Location Logic:** 'Maharashtra' is a STATE. Cities are 'Mumbai', 'Pune'. Use `agent_state` or `bill_to_party_city`.
     - **Fuzzy Match:** NEVER use `==` for strings. Use `df[col].str.contains('val', case=False, na=False)`.
     - **Date Logic:** Use `cleaned_year` for fiscal/calendar year queries.
+    - **Visuals:** If the user asks for a trend, comparison, or distribution, generate a Plotly chart.
+    - **Plotting Rule:** Create a figure object named `fig`. DO NOT use `fig.show()`. Streamlit will handle it.
+    - **Example:**
+      ```python
+      import plotly.express as px
+      fig = px.bar(df, x='city', y='sales', title='Sales by City')
+      ```
     """
 
     prompt = f"""
@@ -461,10 +468,11 @@ def execute_with_self_correction(query, df, history_context, max_retries=2):
             # 2. Execute Code in Sandbox
             # Safety: Replace read_csv with direct copy to prevent file access issues
             code = re.sub(r"pd\.read_csv\(.*?\)", "df.copy()", code) 
-            env = {"df": df.copy(), "pd": pd, "plt": plt, "sns": sns}
+            env = {"df": df.copy(), "pd": pd, "plt": plt, "sns": sns, "px": px}
             exec(code, env)
             
             result_df = env.get("result_df")
+            fig = env.get("fig")
             
             # 3. Validation Checks
             if not isinstance(result_df, pd.DataFrame):
@@ -478,7 +486,7 @@ def execute_with_self_correction(query, df, history_context, max_retries=2):
             if attempt > 0:
                 st.toast(f"✅ Auto-corrected logic in attempt {attempt+1}", icon="🧠")
                 
-            return result_df, code, None
+            return result_df, code, None, fig # Return fig too
             
         except Exception as e:
             last_error = str(e)
@@ -588,7 +596,7 @@ if file:
                 history = "\n".join([m["content"] for m in st.session_state.messages[-3:]])
                 
                 # Execute Analysis (Layers 3 & 4)
-                result_df, code, error = execute_with_self_correction(query, df, history)
+                result_df, code, error = execute_with_self_correction(query, df, history), fig = execute_with_self_correction(query, df, history)
                 
                 if result_df is not None:
                     # Generate Narrative (Layer 5)
@@ -605,6 +613,9 @@ if file:
                         "content": response, 
                         "data": result_df
                     })
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True) # <--- DISPLAY IT
+                    
                 else:
                     st.error("Unable to complete analysis.")
                     with st.expander("See Error Logs"):
