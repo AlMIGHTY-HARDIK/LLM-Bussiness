@@ -1081,12 +1081,12 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     - **Location Logic:** 'Maharashtra' is a STATE. Cities are 'Mumbai', 'Pune'. Use `agent_state` or `bill_to_party_city`.
     - **Fuzzy Match:** NEVER use `==` for strings. Use `df[col].str.contains('val', case=False, na=False)`.
     - **Date Logic:** Use `cleaned_year` for fiscal/calendar year queries.
-    - **Visuals:** If the user asks for a trend, comparison, or distribution, generate a Plotly chart.
-    - **Plotting Rule:** Create a figure object named `fig`. DO NOT use `fig.show()`. Streamlit will handle it.
-    - **Example:**
-      ```python
-      import plotly.express as px
-      fig = px.bar(df, x='city', y='sales', title='Sales by City')
+    # - **Visuals:** If the user asks for a trend, comparison, or distribution, generate a Plotly chart.
+    # - **Plotting Rule:** Create a figure object named `fig`. DO NOT use `fig.show()`. Streamlit will handle it.
+    # - **Example:**
+    #   ```python
+    #   import plotly.express as px
+    #   fig = px.bar(df, x='city', y='sales', title='Sales by City')
 
     1.  **Growth Calculation (CRITICAL):** - When calculating % growth, **FILTER OUT** rows where the Previous Year (Baseline) is <= 0. 
         - *Reason:* Growth from a negative/zero number is mathematically undefined and leads to errors.
