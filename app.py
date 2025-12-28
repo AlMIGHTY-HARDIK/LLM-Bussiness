@@ -730,6 +730,7 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     hints = """
     ### 💡 ANALYST HINTS:
     - **Null Handling:** If ranking Top N, ALWAYS filter out NaNs first: `df.dropna(subset=['col'])`.
+    - **Customer Logic:** ALWAYS use `bill_to_party` (Name) for analysis. NEVER use `bill_to_party_code` (Code).
     - **Location Logic:** 'Maharashtra' is a STATE. Cities are 'Mumbai', 'Pune'.
     - **Fuzzy Match:** NEVER use `==` for strings. Use `df[col].str.contains('val', case=False, na=False)`.
     - **Visuals:** If the user asks for a trend, comparison, or distribution, generate a Plotly chart.
@@ -756,6 +757,7 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     1. **Valid Code Only:** Output pure Python code inside ```python tags.
     2. **Result Variable:** Assign the final output dataframe to `result_df`.
     3. **No Empty Results:** If your filter logic returns an empty dataframe, raise a ValueError.
+    4. **Smart Columns:** If a column has a "_code" and a normal version (e.g., party_code vs party), USE THE NORMAL VERSION.
     """
     
     if error_context:
@@ -833,9 +835,10 @@ def generate_narrative(query, result_df):
     {data_str}
     
     Guidelines:
-    1. **Executive Summary:** One clear sentence.
-    2. **Key Insights:** 2-3 bullet points.
-    3. **Formatting:** Bold key figures. NO scientific notation.
+    1. **Structure:** Executive Summary, Key Insights, Strategic Note.
+    2. **Formatting:** - Use **Bold** for Customer Names.
+       - Do NOT bold the numbers themselves if they are inside a table or list, to avoid formatting errors.
+       - NO scientific notation.
     """
     
     try:
