@@ -1074,6 +1074,8 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     
     hints = """
     ### 💡 ANALYST HINTS:
+    - **Growth Calculation Rule:** When calculating % growth, FIRST filter out any customers where the baseline (previous year) is <= 0. Growth from a negative number is invalid.
+    - **Customer Logic:** ALWAYS use `bill_to_party` (Name).
     - **Null Handling:** If ranking Top N, ALWAYS filter out NaNs first: `df.dropna(subset=['col'])`.
     - **Customer Logic:** ALWAYS use `bill_to_party` (Name) for analysis. NEVER use `bill_to_party_code` (Code).
     - **Location Logic:** 'Maharashtra' is a STATE. Cities are 'Mumbai', 'Pune'. Use `agent_state` or `bill_to_party_city`.
@@ -1085,11 +1087,24 @@ def generate_code_prompt(query, df, history_context, error_context=None):
       ```python
       import plotly.express as px
       fig = px.bar(df, x='city', y='sales', title='Sales by City')
+
+    1.  **Growth Calculation (CRITICAL):** - When calculating % growth, **FILTER OUT** rows where the Previous Year (Baseline) is <= 0. 
+        - *Reason:* Growth from a negative/zero number is mathematically undefined and leads to errors.
+    2.  **Entity Resolution:**
+        - **ALWAYS** prefer Descriptive Name columns (e.g., `bill_to_party`, `material_description`).
+        - **NEVER** use ID/Code columns (e.g., `bill_to_party_code`, `d_code`) unless specifically requested.
+    3.  **Date Logic:**
+        - Use `fiscal_year` if available. If not, use `cleaned_year`.
+        - Be precise with years (e.g., `df['year'] == 2024`).
+    4.  **Visualization:**
+        - If the user asks for a Trend, Comparison, or Distribution, **GENERATE A PLOTLY CHART**.
+        - Assign it to the variable `fig`. Example: `fig = px.bar(...)`.
+        - Do NOT call `fig.show()`.
       ```
     """
 
     prompt = f"""
-    You are an Expert Python Data Analyst.
+    You are a Lead Data Scientist. Write Python code to answer the user's query.
     
     ### DATA PROFILE:
     - Columns: {list(df.columns)}
@@ -1102,9 +1117,9 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     ### 🧠 STRICT RULES:
     1. **Valid Code Only:** Output pure Python code inside ```python tags.
     2. **Result Variable:** Assign the final output dataframe to `result_df`.
-    # 3. **No Empty Results:** If your filter logic returns an empty dataframe, raise a ValueError.
-    3. **No Empty Results:** If your filter logic returns an empty dataframe, the logic is wrong. Try a different column.
-    4. **Smart Columns:** If a column has a "_code" and a normal version (e.g., party_code vs party), USE THE NORMAL VERSION.
+    3. **Variable:** If a chart is created, assign it to `fig`.
+    4. **No Empty Results:** If your filter logic returns an empty dataframe, the logic is wrong. Try a different column.
+    5. **Smart Columns:** If a column has a "_code" and a normal version (e.g., party_code vs party), USE THE NORMAL VERSION.
     """
     
     if error_context:
@@ -1176,7 +1191,8 @@ def generate_narrative(query, result_df):
     data_str = display_df.head(10).to_markdown(index=False)
     
     prompt = f"""
-    You are an Elite Strategy Consultant (McKinsey/BCG style).
+    # You are an Elite Strategy Consultant (McKinsey/BCG style).
+    You are the Chief Strategy Officer (CSO) of a Fortune 500 company.
     User Query: "{query}"
     Data (Formatted):
     {data_str}
@@ -1192,6 +1208,16 @@ def generate_narrative(query, result_df):
        - **NEVER** use scientific notation (e.g., 2.3e7). Use the formatted numbers provided (e.g., 23,000,000).
     4. **Data Integrity:**
        - If the data contains 'nan' or 'Unclassified', explicitly mention this as a "Data Quality Note".
+    ### 🧠 NARRATIVE FRAMEWORK:
+    1.  **The "So What?":** Start with a single, high-impact sentence summarizing the answer. (e.g., "Revenue grew by 15%, driven primarily by X.")
+    2.  **Evidence-Based Insights:** - Provide 2-3 specific data points to back up your claim.
+        - **Contextualize:** Don't just list numbers; explain *why* they matter (e.g., "X is 2x larger than Y").
+    3.  **Strategic Implication:** Offer one forward-looking recommendation or observation.
+    
+    ### ⛔ CRITICAL RULES:
+    - **TRUST THE DATA:** The numbers in the table above are 100% accurate. Do not round them differently or "hallucinate".
+    - **FORMATTING:** - Use **Bold** for Key Entities (Customer Names, Regions).
+        - **ABSOLUTELY NO SCIENTIFIC NOTATION** (e.g., 2.34e8). Use standard formatting (e.g., 234 Million).
     """
     
     try:
