@@ -992,6 +992,11 @@ MODEL_ID = "llama-3.3-70b-versatile"
 
 @st.cache_data
 def load_and_adapt_data(file):
+    """
+    Ingests data, normalizes headers, and intelligently detects date/currency columns.
+    """
+    
+
     try:
         file.seek(0)
         if file.name.endswith('.csv'):
@@ -1037,7 +1042,7 @@ def get_data_health_report(df):
     for col in df.columns:
         null_pct = df[col].isnull().mean()
         if null_pct > 0.5:
-            report.append(f"⚠️ CRITICAL WARNING: Column '{col}' is {null_pct:.1%} empty. DO NOT USE IT. Find a valid alternative.")
+            report.append(f"⚠️ CRITICAL WARNING: Column '{col}' is {null_pct:.1%} empty. DO NOT USE IT. Find a valid alternative (e.g., use 'shade_no' if 'shade_name' is empty).")
     return "\n".join(report)
 
 # ==========================================
@@ -1045,6 +1050,9 @@ def get_data_health_report(df):
 # ==========================================
 
 def clean_llm_response(text):
+    """
+    Strips conversational text (e.g., "Here is the code") to prevent SyntaxErrors.
+    """
     code_block_pattern = r"```(?:python)?\s*(.*?)```"
     match = re.search(code_block_pattern, text, re.DOTALL)
     
@@ -1068,8 +1076,9 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     ### 💡 ANALYST HINTS:
     - **Null Handling:** If ranking Top N, ALWAYS filter out NaNs first: `df.dropna(subset=['col'])`.
     - **Customer Logic:** ALWAYS use `bill_to_party` (Name) for analysis. NEVER use `bill_to_party_code` (Code).
-    - **Location Logic:** 'Maharashtra' is a STATE. Cities are 'Mumbai', 'Pune'.
+    - **Location Logic:** 'Maharashtra' is a STATE. Cities are 'Mumbai', 'Pune'. Use `agent_state` or `bill_to_party_city`.
     - **Fuzzy Match:** NEVER use `==` for strings. Use `df[col].str.contains('val', case=False, na=False)`.
+    - **Date Logic:** Use `cleaned_year` for fiscal/calendar year queries.
     - **Visuals:** If the user asks for a trend, comparison, or distribution, generate a Plotly chart.
     - **Plotting Rule:** Create a figure object named `fig`. DO NOT use `fig.show()`. Streamlit will handle it.
     - **Example:**
@@ -1093,12 +1102,13 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     ### 🧠 STRICT RULES:
     1. **Valid Code Only:** Output pure Python code inside ```python tags.
     2. **Result Variable:** Assign the final output dataframe to `result_df`.
-    3. **No Empty Results:** If your filter logic returns an empty dataframe, raise a ValueError.
+    # 3. **No Empty Results:** If your filter logic returns an empty dataframe, raise a ValueError.
+    3. **No Empty Results:** If your filter logic returns an empty dataframe, the logic is wrong. Try a different column.
     4. **Smart Columns:** If a column has a "_code" and a normal version (e.g., party_code vs party), USE THE NORMAL VERSION.
     """
     
     if error_context:
-        prompt += f"\n\n### 🚨 PREVIOUS ATTEMPT FAILED:\nError: {error_context}\nFix: Rewrite the code to fix this."
+        prompt += f"\n\n### 🚨 PREVIOUS ATTEMPT FAILED:\nError: {error_context}\nFix: Rewrite the code to fix this specific error."
     
     prompt += f"\n\n### QUERY: {query}"
     
@@ -1107,7 +1117,7 @@ def generate_code_prompt(query, df, history_context, error_context=None):
         
     return prompt
 
-def execute_with_self_correction(query, df, history_context, max_retries=2):
+def execute_with_self_correction(query, df, history_context, max_retries=5):
     last_error = None
     
     for attempt in range(max_retries + 1):
@@ -1136,7 +1146,7 @@ def execute_with_self_correction(query, df, history_context, max_retries=2):
                 raise ValueError("The code ran, but did not create a 'result_df' DataFrame.")
             
             if result_df.empty:
-                raise ValueError("Query returned 0 rows. The filter logic might be incorrect.")
+                raise ValueError("Query returned 0 rows. The filter logic (e.g., City vs State, or spelling) might be incorrect.")
             
             if attempt > 0:
                 st.toast(f"✅ Auto-corrected logic in attempt {attempt+1}", icon="🧠")
@@ -1166,7 +1176,7 @@ def generate_narrative(query, result_df):
     data_str = display_df.head(10).to_markdown(index=False)
     
     prompt = f"""
-    You are an Elite Strategy Consultant.
+    You are an Elite Strategy Consultant (McKinsey/BCG style).
     User Query: "{query}"
     Data (Formatted):
     {data_str}
@@ -1176,6 +1186,12 @@ def generate_narrative(query, result_df):
     2. **Formatting:** - Use **Bold** for Customer Names.
        - Do NOT bold the numbers themselves if they are inside a table or list, to avoid formatting errors.
        - NO scientific notation.
+    3. **Tone & Style:**
+       - Professional, concise, and high-impact.
+       - Use **Bold** for key figures and names.
+       - **NEVER** use scientific notation (e.g., 2.3e7). Use the formatted numbers provided (e.g., 23,000,000).
+    4. **Data Integrity:**
+       - If the data contains 'nan' or 'Unclassified', explicitly mention this as a "Data Quality Note".
     """
     
     try:
@@ -1185,6 +1201,8 @@ def generate_narrative(query, result_df):
             temperature=0.7
         )
         return resp.choices[0].message.content
+    except RateLimitError:
+        return f"**⚠️ High Traffic:** I analyzed the data successfully, but cannot generate the narrative summary right now.\n\n**Here is your data:**\n{data_str}"
     except Exception as e:
         return f"Error generating summary. Raw Data:\n{data_str}"
 
