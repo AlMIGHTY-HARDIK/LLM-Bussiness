@@ -977,6 +977,78 @@ st.set_page_config(
 )
 warnings.filterwarnings("ignore")
 
+# --- 🎨 FUTURISTIC UI THEME & CSS HACKS ---
+def apply_custom_css():
+    st.markdown("""
+        <style>
+            /* 1. HIDE STREAMLIT HEADER & FOOTER (Removes GitHub/Deploy Buttons) */
+            header {visibility: hidden;}
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            
+            /* 2. FUTURISTIC COLOR PALETTE */
+            :root {
+                --primary-color: #00FFC2; /* Neon Cyan */
+                --background-color: #0E1117;
+                --secondary-background-color: #161B22;
+                --text-color: #E6E6E6;
+            }
+            
+            /* 3. APP BACKGROUND */
+            .stApp {
+                background-color: var(--background-color);
+            }
+            
+            /* 4. SIDEBAR STYLING */
+            [data-testid="stSidebar"] {
+                background-color: var(--secondary-background-color);
+                border-right: 1px solid #30363D;
+            }
+            
+            /* 5. CUSTOM BUTTONS */
+            .stButton > button {
+                background: linear-gradient(45deg, #00B4DB, #0083B0);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-weight: bold;
+                transition: all 0.3s ease;
+            }
+            .stButton > button:hover {
+                transform: scale(1.02);
+                box-shadow: 0 0 15px rgba(0, 255, 194, 0.4);
+            }
+            
+            /* 6. CHAT MESSAGE STYLING */
+            [data-testid="stChatMessage"] {
+                background-color: #1F242D;
+                border: 1px solid #30363D;
+                border-radius: 12px;
+                padding: 15px;
+                margin-bottom: 10px;
+            }
+            [data-testid="stChatMessageUser"] {
+                background-color: #1A2634; /* Dark Blue tint for user */
+            }
+            
+            /* 7. EXPANDER STYLING */
+            .streamlit-expanderHeader {
+                background-color: #161B22;
+                color: var(--primary-color);
+                font-weight: bold;
+                border-radius: 8px;
+            }
+            
+            /* 8. DATAFRAME STYLING */
+            [data-testid="stDataFrame"] {
+                border: 1px solid #30363D;
+                border-radius: 8px;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+apply_custom_css()
+
 # API Setup
 api_key = st.secrets.get("GROQ_API_KEY")
 if not api_key:
@@ -985,6 +1057,10 @@ if not api_key:
 
 client = Groq(api_key=api_key)
 MODEL_ID = "llama-3.3-70b-versatile" 
+
+# Initialize Token Counter
+if "total_tokens" not in st.session_state:
+    st.session_state.total_tokens = 0
 
 # ==========================================
 # 🧠 LAYER 1: ADAPTIVE DATA ENGINE
@@ -1263,17 +1339,27 @@ def generate_narrative(query, result_df):
 # ==========================================
 
 st.title("🧠 AI Analyst: Enterprise Edition")
-st.markdown("### Intelligent Data Analysis & Strategy")
+st.markdown("### ⚡ Intelligent Data Strategy & Insights")
 
-# --- SIDEBAR WITH FEATURE BUTTONS ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Data & Controls")
+    
+    # TOKEN TRACKER WIDGET
+    st.markdown("### 🔋 System Status")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.write("🪙")
+    with col2:
+        st.metric("Tokens Used", f"{st.session_state.total_tokens:,}", help="Total AI tokens consumed in this session.")
+    
+    st.divider()
+    
     file = st.file_uploader("Upload Data (CSV/Excel)", type=["csv", "xlsx"])
     
     if file:
         st.divider()
         st.subheader("🚀 Quick Actions")
-        # Feature Buttons to trigger analysis
         col1, col2 = st.columns(2)
         with col1:
             if st.button("📊 Overview"):
@@ -1283,31 +1369,16 @@ with st.sidebar:
                 st.session_state.quick_query = "Who are the top 5 customers by total revenue?"
         
         st.divider()
+        st.subheader("🧠 Memory Core")
         
-        st.subheader("🧠 Memory Manager")
+        use_memory = st.toggle("Active Memory", value=True, help="Enable for conversational context.")
         
-        # --- NEW: MEMORY TOGGLE BUTTON ---
-        use_memory = st.toggle("Enable Chat Memory", value=True, help="If ON, the AI uses previous context. If OFF, each question is independent.")
-        
-        # 1. View Memory
-        with st.expander("📜 View Active Memory"):
-            if "messages" in st.session_state and st.session_state.messages:
-                for i, msg in enumerate(st.session_state.messages):
-                    st.text(f"{i+1}. {msg['role'].title()}: {msg['content'][:60]}...")
-            else:
-                st.info("Memory is empty.")
-
-        # 2. Download Memory
-        if "messages" in st.session_state and st.session_state.messages:
-            chat_log = "\n".join([f"[{m['role'].upper()}] {m['content']}" for m in st.session_state.messages])
-            st.download_button("💾 Save Chat", chat_log, "chat_log.txt")
-
-        # 3. Clear Memory
-        if st.button("🧹 Clear Memory", type="primary"):
+        if st.button("🧹 Clear RAM", type="primary"):
             st.session_state.messages = []
+            st.session_state.total_tokens = 0
             st.rerun()
 
-# --- MAIN CHAT LOGIC ---
+# --- MAIN CHAT ---
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -1317,7 +1388,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if "data" in msg:
-            with st.expander("📊 View Data"):
+            with st.expander("📊 View Data Table"):
                 st.dataframe(msg["data"].style.format(precision=2))
         if "fig" in msg and msg["fig"]:
              st.plotly_chart(msg["fig"], use_container_width=True)
@@ -1326,15 +1397,15 @@ if file:
     if "df" not in st.session_state:
         with st.spinner("🚀 Indexing..."):
             st.session_state.df = load_and_adapt_data(file)
-        st.success("Data Ready!")
+        st.success("System Online. Data Indexed.")
     
     df = st.session_state.df
     
-    # Check for Quick Query trigger or Input
-    query = st.chat_input("Ask a question...")
+    # Input Handling
+    query = st.chat_input("Ask a strategic question...")
     if "quick_query" in st.session_state and st.session_state.quick_query:
         query = st.session_state.quick_query
-        del st.session_state.quick_query # Reset
+        del st.session_state.quick_query
     
     if query:
         st.session_state.messages.append({"role": "user", "content": query})
@@ -1342,25 +1413,28 @@ if file:
             st.write(query)
             
         with st.chat_message("assistant"):
-            with st.spinner("⚡ analyzing..."):
+            with st.spinner("⚡ Processing Logic..."):
                 
-                # --- NEW LOGIC FOR MEMORY TOGGLE ---
+                # Context Logic
+                history = ""
                 if use_memory:
                     history = "\n".join([m["content"] for m in st.session_state.messages[-3:]])
-                else:
-                    history = "" # Force independent query
                 
-                # ✅ EXECUTE ANALYSIS
-                result_df, code, error, fig = execute_with_self_correction(query, df, history)
+                # Run Analysis
+                result_df, code, error, fig, tokens_logic = execute_with_self_correction(query, df, history)
+                st.session_state.total_tokens += tokens_logic # Update Counter
                 
                 if result_df is not None:
-                    response = generate_narrative(query, result_df)
+                    # Generate Narrative
+                    response, tokens_narrative = generate_narrative(query, result_df)
+                    st.session_state.total_tokens += tokens_narrative # Update Counter
+                    
                     st.markdown(response)
                     
                     if fig:
                         st.plotly_chart(fig, use_container_width=True)
                     
-                    with st.expander("🔍 Analyst Logic"):
+                    with st.expander("🔍 View Analyst Logic (Code)"):
                         st.code(code, language='python')
                         st.dataframe(result_df)
                     
@@ -1370,6 +1444,12 @@ if file:
                         "data": result_df,
                         "fig": fig
                     })
+                    
+                    # Force a rerun to update the sidebar token counter immediately
+                    st.rerun()
+                    
                 else:
-                    st.error("Analysis Failed.")
-                    st.code(error) # Uses the 'error' variable to show what went wrong
+                    st.error("Analysis Failed")
+                    st.warning("⚠️ Logic Error: The AI could not process the request.")
+                    with st.expander("See Error Details"):
+                        st.code(error)
