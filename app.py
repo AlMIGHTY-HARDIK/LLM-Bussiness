@@ -982,19 +982,37 @@ warnings.filterwarnings("ignore")
 def apply_custom_css():
     st.markdown("""
         <style>
-            /* 1. HIDE STREAMLIT HEADER & FOOTER (Removes GitHub/Deploy Buttons) */
-            header {visibility: hidden;}
+            /* 1. HIDE STREAMLIT HEADER & FOOTER */
+            header[data-testid="stHeader"] {
+                visibility: hidden;
+                height: 0px; /* Collapse header height */
+            }
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
             
-            /* 🛠️ FIX: FORCE SIDEBAR TOGGLE BUTTON TO BE VISIBLE */
-            /* This ensures the arrow to open the sidebar remains visible even if header is hidden */
-            [data-testid="stSidebarCollapsedControl"] {
+            /* 🛠️ FIX: FORCE SIDEBAR TOGGLE BUTTON TO FLOAT & BE VISIBLE */
+            button[data-testid="stSidebarCollapsedControl"] {
                 visibility: visible !important;
                 display: block !important;
-                color: #00FFC2 !important; /* Neon Cyan to match theme */
+                position: fixed !important; /* Force it to stay in the corner */
+                top: 15px !important;
+                left: 15px !important;
+                z-index: 1000001 !important; /* Ensure it sits on top of everything */
+                background-color: rgba(14, 17, 23, 0.8) !important; /* Semi-transparent background */
+                color: #00FFC2 !important; /* Neon Cyan Arrow */
+                border: 1px solid #30363D;
+                border-radius: 8px;
+                width: 40px;
+                height: 40px;
+                transition: all 0.3s ease;
             }
             
+            button[data-testid="stSidebarCollapsedControl"]:hover {
+                transform: scale(1.1);
+                box-shadow: 0 0 15px rgba(0, 255, 194, 0.6);
+                background-color: #0E1117 !important;
+            }
+
             /* 2. FUTURISTIC COLOR PALETTE */
             :root {
                 --primary-color: #00FFC2; /* Neon Cyan */
