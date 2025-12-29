@@ -1512,7 +1512,55 @@ warnings.filterwarnings("ignore")
 def apply_custom_css():
     st.markdown("""
         <style>
+            /* 1. HIDE DEFAULT HEADER DECORATIONS & TOOLBAR */
+            /* Hide the decoration line at the top */
+            [data-testid="stDecoration"] {
+                display: none;
+            }
             
+            /* Hide the 'Deploy' and 'Hamburger' menu (Toolbar) */
+            [data-testid="stToolbar"] {
+                visibility: hidden;
+                display: none;
+            }
+
+            /* Make the main header transparent so we don't see the white bar */
+            header[data-testid="stHeader"] {
+                background-color: transparent;
+                /* Note: We do NOT use visibility:hidden here because it might hide the sidebar arrow on some devices. 
+                   Instead, we hide the contents (Toolbar/Decoration) above. */
+            }
+
+            /* 🛠️ FIX: FORCE SIDEBAR TOGGLE BUTTON TO BE VISIBLE & STYLED */
+            [data-testid="stSidebarCollapsedControl"] {
+                visibility: visible !important;
+                display: block !important;
+                
+                /* Floating Position */
+                position: fixed !important;
+                top: 20px !important;
+                left: 20px !important;
+                z-index: 999999 !important;
+                
+                /* Futuristic Styling */
+                background-color: rgba(14, 17, 23, 0.9) !important;
+                color: #00FFC2 !important; /* Neon Cyan */
+                border: 1px solid #30363D;
+                border-radius: 8px;
+                padding: 4px;
+                width: 45px;
+                height: 45px;
+                transition: all 0.3s ease;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            }
+            
+            /* Hover Effect for the Sidebar Toggle */
+            [data-testid="stSidebarCollapsedControl"]:hover {
+                transform: scale(1.1);
+                box-shadow: 0 0 15px rgba(0, 255, 194, 0.6);
+                background-color: #0E1117 !important;
+                border-color: #00FFC2;
+            }
 
             /* 2. FUTURISTIC COLOR PALETTE */
             :root {
@@ -1589,7 +1637,6 @@ MODEL_ID = "llama-3.3-70b-versatile"
 # Initialize Token Counter
 if "total_tokens" not in st.session_state:
     st.session_state.total_tokens = 0
-
 # ==========================================
 # 🧠 LAYER 1: ADAPTIVE DATA ENGINE
 # ==========================================
