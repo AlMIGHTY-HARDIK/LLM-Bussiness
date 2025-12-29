@@ -973,7 +973,7 @@ import traceback
 st.set_page_config(
     page_title="AI Analyst: Enterprise Edition", 
     layout="wide", 
-    page_icon="🧠"
+    page_icon="🧠",
     initial_sidebar_state="expanded"
 )
 warnings.filterwarnings("ignore")
