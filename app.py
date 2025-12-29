@@ -1081,7 +1081,6 @@ def load_and_adapt_data(file):
     Ingests data, normalizes headers, and intelligently detects date/currency columns.
     """
     
-
     try:
         file.seek(0)
         if file.name.endswith('.csv'):
@@ -1169,9 +1168,9 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     # - **Visuals:** If the user asks for a trend, comparison, or distribution, generate a Plotly chart.
     # - **Plotting Rule:** Create a figure object named `fig`. DO NOT use `fig.show()`. Streamlit will handle it.
     # - **Example:**
-    #   ```python
-    #   import plotly.express as px
-    #   fig = px.bar(df, x='city', y='sales', title='Sales by City')
+    #    ```python
+    #    import plotly.express as px
+    #    fig = px.bar(df, x='city', y='sales', title='Sales by City')
 
     1.  **📍 GEOGRAPHY RULES:**
         - **State:** If query asks for a STATE (e.g., 'Rajasthan', 'Gujarat'), filter by `agent_state`.
@@ -1243,6 +1242,7 @@ def generate_code_prompt(query, df, history_context, error_context=None):
 
 def execute_with_self_correction(query, df, history_context, max_retries=5):
     last_error = None
+    tokens_used = 0
     
     for attempt in range(max_retries + 1):
         try:
@@ -1254,6 +1254,10 @@ def execute_with_self_correction(query, df, history_context, max_retries=5):
                 messages=[{"role": "system", "content": prompt}],
                 temperature=0.1 
             )
+            # Track Tokens
+            if resp.usage:
+                tokens_used += resp.usage.total_tokens
+
             raw_response = resp.choices[0].message.content
             code = clean_llm_response(raw_response)
             
@@ -1275,7 +1279,7 @@ def execute_with_self_correction(query, df, history_context, max_retries=5):
             if attempt > 0:
                 st.toast(f"✅ Auto-corrected logic in attempt {attempt+1}", icon="🧠")
                 
-            return result_df, code, None, fig 
+            return result_df, code, None, fig, tokens_used
             
         except Exception as e:
             last_error = str(e)
@@ -1283,14 +1287,14 @@ def execute_with_self_correction(query, df, history_context, max_retries=5):
                 st.toast(f"⚠️ Retrying... (Error: {last_error})", icon="🔧")
                 continue
             else:
-                return None, code, last_error, None # Ensuring 4 values are returned
+                return None, code, last_error, None, tokens_used
 
 # ==========================================
 # 🗣️ LAYER 5: ELITE NARRATIVE ENGINE
 # ==========================================
 
 def generate_narrative(query, result_df):
-    if result_df.empty: return "No data found."
+    if result_df.empty: return "No data found.", 0
     
     display_df = result_df.copy()
     for col in display_df.select_dtypes(include=['number']).columns:
@@ -1320,8 +1324,7 @@ def generate_narrative(query, result_df):
 
     ### 🧠 NARRATIVE FRAMEWORK:
     1.  **The "So What?":** Start with a single, high-impact sentence summarizing the answer (e.g., "Revenue grew by 15%, driven primarily by X."), table when ever needed. 
-    2.  **Evidence-Based Insights:** 
-        - Provide 2-3 specific data points to back up your claim.
+    2.  **Evidence-Based Insights:** - Provide 2-3 specific data points to back up your claim.
         - **Contextualize:** Don't just list numbers; explain *why* they matter (e.g., "X is 2x larger than Y").
     3.  **Strategic Implication:** Offer one forward-looking recommendation or observation.
     
@@ -1337,15 +1340,17 @@ def generate_narrative(query, result_df):
             messages=[{"role": "system", "content": prompt}],
             temperature=0.7
         )
-        return resp.choices[0].message.content
+        tokens = resp.usage.total_tokens if resp.usage else 0
+        return resp.choices[0].message.content, tokens
     except RateLimitError:
-        return f"**⚠️ High Traffic:** I analyzed the data successfully, but cannot generate the narrative summary right now.\n\n**Here is your data:**\n{data_str}"
+        return f"**⚠️ High Traffic:** I analyzed the data successfully, but cannot generate the narrative summary right now.\n\n**Here is your data:**\n{data_str}", 0
     except Exception as e:
-        return f"Error generating summary. Raw Data:\n{data_str}"
+        return f"Error generating summary. Raw Data:\n{data_str}", 0
 
 # ==========================================
 # 🖥️ UI IMPLEMENTATION
 # ==========================================
+
 st.title("🧠 AI Analyst: Enterprise Edition")
 st.markdown("### ⚡ Intelligent Data Strategy & Insights")
 
