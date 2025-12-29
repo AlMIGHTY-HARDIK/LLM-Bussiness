@@ -987,6 +987,14 @@ def apply_custom_css():
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
             
+            /* 🛠️ FIX: FORCE SIDEBAR TOGGLE BUTTON TO BE VISIBLE */
+            /* This ensures the arrow to open the sidebar remains visible even if header is hidden */
+            [data-testid="stSidebarCollapsedControl"] {
+                visibility: visible !important;
+                display: block !important;
+                color: #00FFC2 !important; /* Neon Cyan to match theme */
+            }
+            
             /* 2. FUTURISTIC COLOR PALETTE */
             :root {
                 --primary-color: #00FFC2; /* Neon Cyan */
@@ -1338,7 +1346,6 @@ def generate_narrative(query, result_df):
 # ==========================================
 # 🖥️ UI IMPLEMENTATION
 # ==========================================
-
 st.title("🧠 AI Analyst: Enterprise Edition")
 st.markdown("### ⚡ Intelligent Data Strategy & Insights")
 
