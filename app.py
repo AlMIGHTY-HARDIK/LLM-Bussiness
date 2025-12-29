@@ -1073,7 +1073,7 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     health_report = get_data_health_report(df)
     
     hints = """
-    ### 💡 ANALYST HINTS:
+    ### 💡 ANALYST HINTS & 💡 ANALYST LOGIC & RULES (STRICT):
     - **Growth Calculation Rule:** When calculating % growth, FIRST filter out any customers where the baseline (previous year) is <= 0. Growth from a negative number is invalid.
     - **Customer Logic:** ALWAYS use `bill_to_party` (Name).
     - **Null Handling:** If ranking Top N, ALWAYS filter out NaNs first: `df.dropna(subset=['col'])`.
@@ -1088,18 +1088,33 @@ def generate_code_prompt(query, df, history_context, error_context=None):
     #   import plotly.express as px
     #   fig = px.bar(df, x='city', y='sales', title='Sales by City')
 
-    1.  **Growth Calculation (CRITICAL):** - When calculating % growth, **FILTER OUT** rows where the Previous Year (Baseline) is <= 0. 
-        - *Reason:* Growth from a negative/zero number is mathematically undefined and leads to errors.
-    2.  **Entity Resolution:**
-        - **ALWAYS** prefer Descriptive Name columns (e.g., `bill_to_party`, `material_description`).
-        - **NEVER** use ID/Code columns (e.g., `bill_to_party_code`, `d_code`) unless specifically requested.
-    3.  **Date Logic:**
-        - Use `fiscal_year` if available. If not, use `cleaned_year`.
-        - Be precise with years (e.g., `df['year'] == 2024`).
-    4.  **Visualization:**
-        - If the user asks for a Trend, Comparison, or Distribution, **GENERATE A PLOTLY CHART**.
-        - Assign it to the variable `fig`. Example: `fig = px.bar(...)`.
-        - Do NOT call `fig.show()`.
+    1.  **📍 GEOGRAPHY RULES:**
+        - **State:** If query asks for a STATE (e.g., 'Rajasthan', 'Gujarat'), filter by `agent_state`.
+        - **City:** If query asks for a CITY (e.g., 'Mumbai', 'Surat'), filter by `bill_to_party_city`.
+        - **Region:** Use `region_zone`.
+
+    2.  **📈 FINANCIAL MATH RULES (CRITICAL):**
+        - **Growth %:** `((Current - Previous) / Previous) * 100`
+        - **Negative Baseline Filter:** BEFORE calculating growth, YOU MUST remove rows where the Previous Year Sales are <= 0. 
+          - *Reason:* Calculating growth from a negative number is mathematically invalid and yields wrong results.
+        - **Sales Column:** ALWAYS prefer `net_amount_inr` for revenue calculations.
+
+    3.  **🔎 SEARCH & MATCHING:**
+        - **Fuzzy Match:** NEVER use exact `==` for text filters. 
+          - *Correct:* `df[df['col'].str.contains('Pattern', case=False, na=False)]`
+        - **Entity Names:**
+          - Customer -> `bill_to_party` (NOT `bill_to_party_code`)
+          - Design -> `design` (NOT `ainocular_design`)
+          - Item/Product -> `material`
+
+    4.  **🗓️ DATE LOGIC:**
+        - Use `fiscal_year` for yearly comparisons (2023 vs 2024).
+        - Use `invoice_date` for daily/monthly trends.
+
+    5.  **📊 VISUALIZATION:**
+        - Create a Plotly figure object named `fig`.
+        - Example: `fig = px.bar(df, x='agent_state', y='net_amount_inr', title='...')`
+        - Do NOT use `fig.show()`.
       ```
     """
 
