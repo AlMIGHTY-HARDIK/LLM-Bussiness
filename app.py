@@ -1111,7 +1111,16 @@ def generate_code_prompt(query, df, history_context, error_context=None):
         - Use `fiscal_year` for yearly comparisons (2023 vs 2024).
         - Use `invoice_date` for daily/monthly trends.
 
-    5.  **📊 VISUALIZATION:**
+    5.  **💰 PRICING vs. REVENUE (CRITICAL):**
+        - **"Most Expensive" / "Highest Price":** Sort by `basic_price`, `unit_price`, or `rate`. 
+          - *Do NOT* use `net_amount` (which is Price * Qty).
+        - **"Top Selling" / "Highest Revenue":** Sort by `net_amount_inr`.
+    
+    6.  **🏷️ NAMING CONVENTION:**
+        - **Products:** When listing products, ALWAYS show the `design`, `quality`, or `material_description` column alongside the ID.
+        - **Customers:** Use `bill_to_party` (Name), not `bill_to_party_code`.
+
+    6.  **📊 VISUALIZATION:**
         - Create a Plotly figure object named `fig`.
         - Example: `fig = px.bar(df, x='agent_state', y='net_amount_inr', title='...')`
         - Do NOT use `fig.show()`.
