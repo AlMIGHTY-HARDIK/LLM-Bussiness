@@ -959,6 +959,536 @@
 #                     st.code(error) # Uses the 'error' variable to show what went wrong
 
 
+# import streamlit as st
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# import seaborn as sns
+# import plotly.express as px
+# from groq import Groq, RateLimitError
+# import re
+# import warnings
+# import traceback
+
+# # --- 1. CONFIGURATION & SETUP ---
+# st.set_page_config(
+#     page_title="AI Analyst: Enterprise Edition", 
+#     layout="wide", 
+#     page_icon="🧠",
+#     initial_sidebar_state="expanded"
+# )
+# warnings.filterwarnings("ignore")
+
+# # --- 🎨 FUTURISTIC UI THEME & CSS HACKS ---
+# def apply_custom_css():
+#     st.markdown("""
+#         <style>
+#             /* 1. HIDE STREAMLIT HEADER & FOOTER */
+#             header[data-testid="stHeader"] {
+#                 visibility: hidden;
+#                 height: 0px; /* Collapse header height */
+#             }
+#             #MainMenu {visibility: hidden;}
+#             footer {visibility: hidden;}
+            
+#             /* 🛠️ FIX: FORCE SIDEBAR TOGGLE BUTTON TO FLOAT & BE VISIBLE */
+#             button[data-testid="stSidebarCollapsedControl"] {
+#                 visibility: visible !important;
+#                 display: block !important;
+#                 position: fixed !important; /* Force it to stay in the corner */
+#                 top: 15px !important;
+#                 left: 15px !important;
+#                 z-index: 1000001 !important; /* Ensure it sits on top of everything */
+#                 background-color: rgba(14, 17, 23, 0.8) !important; /* Semi-transparent background */
+#                 color: #00FFC2 !important; /* Neon Cyan Arrow */
+#                 border: 1px solid #30363D;
+#                 border-radius: 8px;
+#                 width: 40px;
+#                 height: 40px;
+#                 transition: all 0.3s ease;
+#             }
+            
+#             button[data-testid="stSidebarCollapsedControl"]:hover {
+#                 transform: scale(1.1);
+#                 box-shadow: 0 0 15px rgba(0, 255, 194, 0.6);
+#                 background-color: #0E1117 !important;
+#             }
+
+#             /* 2. FUTURISTIC COLOR PALETTE */
+#             :root {
+#                 --primary-color: #00FFC2; /* Neon Cyan */
+#                 --background-color: #0E1117;
+#                 --secondary-background-color: #161B22;
+#                 --text-color: #E6E6E6;
+#             }
+            
+#             /* 3. APP BACKGROUND */
+#             .stApp {
+#                 background-color: var(--background-color);
+#             }
+            
+#             /* 4. SIDEBAR STYLING */
+#             [data-testid="stSidebar"] {
+#                 background-color: var(--secondary-background-color);
+#                 border-right: 1px solid #30363D;
+#             }
+            
+#             /* 5. CUSTOM BUTTONS */
+#             .stButton > button {
+#                 background: linear-gradient(45deg, #00B4DB, #0083B0);
+#                 color: white;
+#                 border: none;
+#                 border-radius: 8px;
+#                 font-weight: bold;
+#                 transition: all 0.3s ease;
+#             }
+#             .stButton > button:hover {
+#                 transform: scale(1.02);
+#                 box-shadow: 0 0 15px rgba(0, 255, 194, 0.4);
+#             }
+            
+#             /* 6. CHAT MESSAGE STYLING */
+#             [data-testid="stChatMessage"] {
+#                 background-color: #1F242D;
+#                 border: 1px solid #30363D;
+#                 border-radius: 12px;
+#                 padding: 15px;
+#                 margin-bottom: 10px;
+#             }
+#             [data-testid="stChatMessageUser"] {
+#                 background-color: #1A2634; /* Dark Blue tint for user */
+#             }
+            
+#             /* 7. EXPANDER STYLING */
+#             .streamlit-expanderHeader {
+#                 background-color: #161B22;
+#                 color: var(--primary-color);
+#                 font-weight: bold;
+#                 border-radius: 8px;
+#             }
+            
+#             /* 8. DATAFRAME STYLING */
+#             [data-testid="stDataFrame"] {
+#                 border: 1px solid #30363D;
+#                 border-radius: 8px;
+#             }
+#         </style>
+#     """, unsafe_allow_html=True)
+
+# apply_custom_css()
+
+# # API Setup
+# api_key = st.secrets.get("GROQ_API_KEY")
+# if not api_key:
+#     st.error("🚨 Groq API Key missing! Check .streamlit/secrets.toml")
+#     st.stop()
+
+# client = Groq(api_key=api_key)
+# MODEL_ID = "llama-3.3-70b-versatile" 
+
+# # Initialize Token Counter
+# if "total_tokens" not in st.session_state:
+#     st.session_state.total_tokens = 0
+
+# # ==========================================
+# # 🧠 LAYER 1: ADAPTIVE DATA ENGINE
+# # ==========================================
+
+# @st.cache_data
+# def load_and_adapt_data(file):
+#     """
+#     Ingests data, normalizes headers, and intelligently detects date/currency columns.
+#     """
+    
+#     try:
+#         file.seek(0)
+#         if file.name.endswith('.csv'):
+#             df = pd.read_csv(file, low_memory=False)
+#         else:
+#             df = pd.read_excel(file)
+
+#         # 1. Standardize Headers
+#         df.columns = [
+#             str(c).strip().lower().replace(' ', '_').replace('.', '').replace('/', '_').replace('-', '_') 
+#             for c in df.columns
+#         ]
+
+#         # 2. Adaptive Date Parsing
+#         date_col = next((c for c in df.columns if 'date' in c or 'invoice' in c), None)
+#         if date_col:
+#             df[date_col] = pd.to_datetime(df[date_col], format='%d-%b-%y', errors='coerce')
+#             if df[date_col].isnull().mean() > 0.5: 
+#                 df[date_col] = pd.to_datetime(df[date_col], dayfirst=True, errors='coerce')
+#             df['cleaned_year'] = df[date_col].dt.year
+
+#         # 3. Adaptive Currency Cleaning
+#         sales_col = next((c for c in df.columns if c in ['net_amount_inr', 'net_amount', 'gross_amount', 'total_amount', 'sales']), None)
+#         if sales_col:
+#             if df[sales_col].dtype == 'object':
+#                  df[sales_col] = pd.to_numeric(df[sales_col].astype(str).str.replace(r'[$,₹]', '', regex=True), errors='coerce')
+#             df['cleaned_sales'] = df[sales_col]
+
+#         # 4. String Normalization
+#         for col in df.select_dtypes(include=['object']).columns:
+#             df[col] = df[col].astype(str).str.strip()
+
+#         return df
+#     except Exception as e:
+#         return None
+
+# # ==========================================
+# # 👁️ LAYER 2: DATA HEALTH SCANNER
+# # ==========================================
+
+# def get_data_health_report(df):
+#     report = []
+#     for col in df.columns:
+#         null_pct = df[col].isnull().mean()
+#         if null_pct > 0.5:
+#             report.append(f"⚠️ CRITICAL WARNING: Column '{col}' is {null_pct:.1%} empty. DO NOT USE IT. Find a valid alternative (e.g., use 'shade_no' if 'shade_name' is empty).")
+#     return "\n".join(report)
+
+# # ==========================================
+# # 🛡️ LAYER 3: CODE SANITIZER
+# # ==========================================
+
+# def clean_llm_response(text):
+#     """
+#     Strips conversational text (e.g., "Here is the code") to prevent SyntaxErrors.
+#     """
+#     code_block_pattern = r"```(?:python)?\s*(.*?)```"
+#     match = re.search(code_block_pattern, text, re.DOTALL)
+    
+#     if match:
+#         code = match.group(1).strip()
+#     else:
+#         code = text.strip()
+    
+#     lines = code.split('\n')
+#     clean_lines = [line for line in lines if not line.lower().startswith(('here is', 'to address', 'note:', 'i have', 'python'))]
+#     return "\n".join(clean_lines)
+
+# # ==========================================
+# # 🛠️ LAYER 4: SELF-HEALING LOGIC ENGINE
+# # ==========================================
+
+# def generate_code_prompt(query, df, history_context, error_context=None):
+#     health_report = get_data_health_report(df)
+    
+#     hints = """
+#     ### 💡 ANALYST HINTS & 💡 ANALYST LOGIC & RULES (STRICT):
+#     - **Growth Calculation Rule:** When calculating % growth, FIRST filter out any customers where the baseline (previous year) is <= 0. Growth from a negative number is invalid.
+#     - **Customer Logic:** ALWAYS use `bill_to_party` (Name).
+#     - **Null Handling:** If ranking Top N, ALWAYS filter out NaNs first: `df.dropna(subset=['col'])`.
+#     - **Customer Logic:** ALWAYS use `bill_to_party` (Name) for analysis. NEVER use `bill_to_party_code` (Code).
+#     - **Location Logic:** 'Maharashtra' is a STATE. Cities are 'Mumbai', 'Pune'. Use `agent_state` or `bill_to_party_city`.
+#     - **Fuzzy Match:** NEVER use `==` for strings. Use `df[col].str.contains('val', case=False, na=False)`.
+#     - **Date Logic:** Use `cleaned_year` for fiscal/calendar year queries.
+#     # - **Visuals:** If the user asks for a trend, comparison, or distribution, generate a Plotly chart.
+#     # - **Plotting Rule:** Create a figure object named `fig`. DO NOT use `fig.show()`. Streamlit will handle it.
+#     # - **Example:**
+#     #    ```python
+#     #    import plotly.express as px
+#     #    fig = px.bar(df, x='city', y='sales', title='Sales by City')
+
+#     1.  **📍 GEOGRAPHY RULES:**
+#         - **State:** If query asks for a STATE (e.g., 'Rajasthan', 'Gujarat'), filter by `agent_state`.
+#         - **City:** If query asks for a CITY (e.g., 'Mumbai', 'Surat'), filter by `bill_to_party_city`.
+#         - **Region:** Use `region_zone`.
+
+#     2.  **📈 FINANCIAL MATH RULES (CRITICAL):**
+#         - **Growth %:** `((Current - Previous) / Previous) * 100`
+#         - **Negative Baseline Filter:** BEFORE calculating growth, YOU MUST remove rows where the Previous Year Sales are <= 0. 
+#           - *Reason:* Calculating growth from a negative number is mathematically invalid and yields wrong results.
+#         - **Sales Column:** ALWAYS prefer `net_amount_inr` for revenue calculations.
+
+#     3.  **🔎 SEARCH & MATCHING:**
+#         - **Fuzzy Match:** NEVER use exact `==` for text filters. 
+#           - *Correct:* `df[df['col'].str.contains('Pattern', case=False, na=False)]`
+#         - **Entity Names:**
+#           - Customer -> `bill_to_party` (NOT `bill_to_party_code`)
+#           - Design -> `design` (NOT `ainocular_design`)
+#           - Item/Product -> `material`
+
+#     4.  **🗓️ DATE LOGIC:**
+#         - Use `fiscal_year` for yearly comparisons (2023 vs 2024).
+#         - Use `invoice_date` for daily/monthly trends.
+
+#     5.  **💰 PRICING vs. REVENUE (CRITICAL):**
+#         - **"Most Expensive" / "Highest Price":** Sort by `basic_price`, `unit_price`, or `rate`. 
+#           - *Do NOT* use `net_amount` (which is Price * Qty).
+#         - **"Top Selling" / "Highest Revenue":** Sort by `net_amount_inr`.
+    
+#     6.  **🏷️ NAMING CONVENTION:**
+#         - **Products:** When listing products, ALWAYS show the `design`, `quality`, or `material_description` column alongside the ID.
+#         - **Customers:** Use `bill_to_party` (Name), not `bill_to_party_code`.
+
+#     6.  **📊 VISUALIZATION:**
+#         - Create a Plotly figure object named `fig`.
+#         - Example: `fig = px.bar(df, x='agent_state', y='net_amount_inr', title='...')`
+#         - Do NOT use `fig.show()`.
+#       ```
+#     """
+
+#     prompt = f"""
+#     You are a Lead Data Scientist. Write Python code to answer the user's query.
+    
+#     ### DATA PROFILE:
+#     - Columns: {list(df.columns)}
+    
+#     ### 🛡️ HEALTH WARNINGS:
+#     {health_report}
+    
+#     {hints}
+    
+#     ### 🧠 STRICT RULES:
+#     1. **Valid Code Only:** Output pure Python code inside ```python tags.
+#     2. **Result Variable:** Assign the final output dataframe to `result_df`.
+#     3. **Variable:** If a chart is created, assign it to `fig`.
+#     4. **No Empty Results:** If your filter logic returns an empty dataframe, the logic is wrong. Try a different column.
+#     5. **Smart Columns:** If a column has a "_code" and a normal version (e.g., party_code vs party), USE THE NORMAL VERSION.
+#     """
+    
+#     if error_context:
+#         prompt += f"\n\n### 🚨 PREVIOUS ATTEMPT FAILED:\nError: {error_context}\nFix: Rewrite the code to fix this specific error."
+    
+#     prompt += f"\n\n### QUERY: {query}"
+    
+#     if history_context:
+#         prompt += f"\n\n### CONTEXT: {history_context}"
+        
+#     return prompt
+
+# def execute_with_self_correction(query, df, history_context, max_retries=5):
+#     last_error = None
+#     tokens_used = 0
+    
+#     for attempt in range(max_retries + 1):
+#         try:
+#             # 1. Generate Code
+#             prompt = generate_code_prompt(query, df, history_context, last_error)
+            
+#             resp = client.chat.completions.create(
+#                 model=MODEL_ID,
+#                 messages=[{"role": "system", "content": prompt}],
+#                 temperature=0.1 
+#             )
+#             # Track Tokens
+#             if resp.usage:
+#                 tokens_used += resp.usage.total_tokens
+
+#             raw_response = resp.choices[0].message.content
+#             code = clean_llm_response(raw_response)
+            
+#             # 2. Execute Code
+#             code = re.sub(r"pd\.read_csv\(.*?\)", "df.copy()", code) 
+#             env = {"df": df.copy(), "pd": pd, "plt": plt, "sns": sns, "px": px}
+#             exec(code, env)
+            
+#             result_df = env.get("result_df")
+#             fig = env.get("fig")
+            
+#             # 3. Validation
+#             if not isinstance(result_df, pd.DataFrame):
+#                 raise ValueError("The code ran, but did not create a 'result_df' DataFrame.")
+            
+#             if result_df.empty:
+#                 raise ValueError("Query returned 0 rows. The filter logic (e.g., City vs State, or spelling) might be incorrect.")
+            
+#             if attempt > 0:
+#                 st.toast(f"✅ Auto-corrected logic in attempt {attempt+1}", icon="🧠")
+                
+#             return result_df, code, None, fig, tokens_used
+            
+#         except Exception as e:
+#             last_error = str(e)
+#             if attempt < max_retries:
+#                 st.toast(f"⚠️ Retrying... (Error: {last_error})", icon="🔧")
+#                 continue
+#             else:
+#                 return None, code, last_error, None, tokens_used
+
+# # ==========================================
+# # 🗣️ LAYER 5: ELITE NARRATIVE ENGINE
+# # ==========================================
+
+# def generate_narrative(query, result_df):
+#     if result_df.empty: return "No data found.", 0
+    
+#     display_df = result_df.copy()
+#     for col in display_df.select_dtypes(include=['number']).columns:
+#         if display_df[col].mean() > 1000:
+#              display_df[col] = display_df[col].apply(lambda x: f"{x:,.2f}")
+    
+#     data_str = display_df.head(10).to_markdown(index=False)
+    
+#     prompt = f"""
+#     # You are an Elite Strategy Consultant (McKinsey/BCG style).
+#     You are the Chief Strategy Officer (CSO) of a Fortune 500 company.
+#     User Query: "{query}"
+#     Data (Formatted):
+#     {data_str}
+    
+#     Guidelines:
+#     1. **Structure:** Executive Summary, Table(when ever needed), Key Insights, Strategic Note.
+#     2. **Formatting:** - Use **Bold** for Customer Names.
+#        - Do NOT bold the numbers themselves if they are inside a table or list, to avoid formatting errors.
+#        - NO scientific notation.
+#     3. **Tone & Style:**
+#        - Professional, concise, and high-impact.
+#        - Use **Bold** for key figures and names.
+#        - **NEVER** use scientific notation (e.g., 2.3e7). Use the formatted numbers provided (e.g., 23,000,000).
+#     4. **Data Integrity:**
+#        - If the data contains 'nan' or 'Unclassified', explicitly mention this as a "Data Quality Note".
+
+#     ### 🧠 NARRATIVE FRAMEWORK:
+#     1.  **The "So What?":** Start with a single, high-impact sentence summarizing the answer (e.g., "Revenue grew by 15%, driven primarily by X."), table when ever needed. 
+#     2.  **Evidence-Based Insights:** - Provide 2-3 specific data points to back up your claim.
+#         - **Contextualize:** Don't just list numbers; explain *why* they matter (e.g., "X is 2x larger than Y").
+#     3.  **Strategic Implication:** Offer one forward-looking recommendation or observation.
+    
+#     ### ⛔ CRITICAL RULES:
+#     - **TRUST THE DATA:** The numbers in the table above are 100% accurate. Do not round them differently or "hallucinate".
+#     - **FORMATTING:** - Use **Bold** for Key Entities (Customer Names, Regions).
+#         - **ABSOLUTELY NO SCIENTIFIC NOTATION** (e.g., 2.34e8). Use standard formatting (e.g., 234 Million).
+#     """
+    
+#     try:
+#         resp = client.chat.completions.create(
+#             model=MODEL_ID,
+#             messages=[{"role": "system", "content": prompt}],
+#             temperature=0.7
+#         )
+#         tokens = resp.usage.total_tokens if resp.usage else 0
+#         return resp.choices[0].message.content, tokens
+#     except RateLimitError:
+#         return f"**⚠️ High Traffic:** I analyzed the data successfully, but cannot generate the narrative summary right now.\n\n**Here is your data:**\n{data_str}", 0
+#     except Exception as e:
+#         return f"Error generating summary. Raw Data:\n{data_str}", 0
+
+# # ==========================================
+# # 🖥️ UI IMPLEMENTATION
+# # ==========================================
+
+# st.title("🧠 AI Analyst: Enterprise Edition")
+# st.markdown("### ⚡ Intelligent Data Strategy & Insights")
+
+# # --- SIDEBAR ---
+# with st.sidebar:
+#     st.header("⚙️ Data & Controls")
+    
+#     # TOKEN TRACKER WIDGET
+#     st.markdown("### 🔋 System Status")
+#     col1, col2 = st.columns([1, 2])
+#     with col1:
+#         st.write("🪙")
+#     with col2:
+#         st.metric("Tokens Used", f"{st.session_state.total_tokens:,}", help="Total AI tokens consumed in this session.")
+    
+#     st.divider()
+    
+#     file = st.file_uploader("Upload Data (CSV/Excel)", type=["csv", "xlsx"])
+    
+#     if file:
+#         st.divider()
+#         st.subheader("🚀 Quick Actions")
+#         col1, col2 = st.columns(2)
+#         with col1:
+#             if st.button("📊 Overview"):
+#                 st.session_state.quick_query = "Show me a high-level overview of sales and key trends."
+#         with col2:
+#             if st.button("🏆 Top Cust."):
+#                 st.session_state.quick_query = "Who are the top 5 customers by total revenue?"
+        
+#         st.divider()
+#         st.subheader("🧠 Memory Core")
+        
+#         use_memory = st.toggle("Active Memory", value=True, help="Enable for conversational context.")
+        
+#         if st.button("🧹 Clear RAM", type="primary"):
+#             st.session_state.messages = []
+#             st.session_state.total_tokens = 0
+#             st.rerun()
+
+# # --- MAIN CHAT ---
+
+# if "messages" not in st.session_state:
+#     st.session_state.messages = []
+
+# # Display History
+# for msg in st.session_state.messages:
+#     with st.chat_message(msg["role"]):
+#         st.markdown(msg["content"])
+#         if "data" in msg:
+#             with st.expander("📊 View Data Table"):
+#                 st.dataframe(msg["data"].style.format(precision=2))
+#         if "fig" in msg and msg["fig"]:
+#              st.plotly_chart(msg["fig"], use_container_width=True)
+
+# if file:
+#     if "df" not in st.session_state:
+#         with st.spinner("🚀 Indexing..."):
+#             st.session_state.df = load_and_adapt_data(file)
+#         st.success("System Online. Data Indexed.")
+    
+#     df = st.session_state.df
+    
+#     # Input Handling
+#     query = st.chat_input("Ask a strategic question...")
+#     if "quick_query" in st.session_state and st.session_state.quick_query:
+#         query = st.session_state.quick_query
+#         del st.session_state.quick_query
+    
+#     if query:
+#         st.session_state.messages.append({"role": "user", "content": query})
+#         with st.chat_message("user"):
+#             st.write(query)
+            
+#         with st.chat_message("assistant"):
+#             with st.spinner("⚡ Processing Logic..."):
+                
+#                 # Context Logic
+#                 history = ""
+#                 if use_memory:
+#                     history = "\n".join([m["content"] for m in st.session_state.messages[-3:]])
+                
+#                 # Run Analysis
+#                 result_df, code, error, fig, tokens_logic = execute_with_self_correction(query, df, history)
+#                 st.session_state.total_tokens += tokens_logic # Update Counter
+                
+#                 if result_df is not None:
+#                     # Generate Narrative
+#                     response, tokens_narrative = generate_narrative(query, result_df)
+#                     st.session_state.total_tokens += tokens_narrative # Update Counter
+                    
+#                     st.markdown(response)
+                    
+#                     if fig:
+#                         st.plotly_chart(fig, use_container_width=True)
+                    
+#                     with st.expander("🔍 View Analyst Logic (Code)"):
+#                         st.code(code, language='python')
+#                         st.dataframe(result_df)
+                    
+#                     st.session_state.messages.append({
+#                         "role": "assistant", 
+#                         "content": response, 
+#                         "data": result_df,
+#                         "fig": fig
+#                     })
+                    
+#                     # Force a rerun to update the sidebar token counter immediately
+#                     st.rerun()
+                    
+#                 else:
+#                     st.error("Analysis Failed")
+#                     st.warning("⚠️ Logic Error: The AI could not process the request.")
+#                     with st.expander("See Error Details"):
+#                         st.code(error)
+
+
+
+
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
