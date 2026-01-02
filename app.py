@@ -968,6 +968,8 @@ from groq import Groq, RateLimitError
 import re
 import warnings
 import traceback
+from openai import OpenAI
+
 
 # --- 1. CONFIGURATION & SETUP ---
 st.set_page_config(
