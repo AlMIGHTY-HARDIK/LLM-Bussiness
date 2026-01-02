@@ -985,8 +985,13 @@ if not api_key:
     st.error("🚨 Groq API Key missing! Check .streamlit/secrets.toml")
     st.stop()
 
-client = Groq(api_key=api_key)
-# MODEL_ID = "llama-3.3-70b-versatile" 
+# client = Groq(api_key=api_key)
+# MODEL_ID = "llama-3.3-70b-versatile"
+
+client = OpenAI(
+    api_key="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", 
+    base_url="https://api.groq.com/openai/v1"
+)
 MODEL_ID = "groq/compound"
 
 # Initialize Token Counter
