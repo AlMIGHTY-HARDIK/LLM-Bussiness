@@ -987,7 +987,7 @@ if not api_key:
     st.error("🚨 Groq API Key missing! Check .streamlit/secrets.toml")
     st.stop()
 
-client = OpenAI(api_key=api_key)
+client = Groq(api_key=api_key)
 MODEL_ID = "llama-3.3-70b-versatile"
 
 # client = OpenAI(
