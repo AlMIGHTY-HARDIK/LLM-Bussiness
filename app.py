@@ -986,7 +986,8 @@ if not api_key:
     st.stop()
 
 client = Groq(api_key=api_key)
-MODEL_ID = "llama-3.3-70b-versatile" 
+# MODEL_ID = "llama-3.3-70b-versatile" 
+MODEL_ID = "groq/compound"
 
 # Initialize Token Counter
 if "total_tokens" not in st.session_state:
