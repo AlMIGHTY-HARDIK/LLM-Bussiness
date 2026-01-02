@@ -1161,9 +1161,10 @@ def generate_code_prompt(query, df, history_context, error_context=None):
         
     return prompt
 
-def execute_with_self_correction(query, df, history_context, max_retries=5):
+def execute_with_self_correction(query, df, history_context, max_retries=8):
     last_error = None
     tokens_used = 0
+    code = ""  # <--- 🛠️ FIX: Initialize 'code' here so it never crashes
     
     for attempt in range(max_retries + 1):
         try:
